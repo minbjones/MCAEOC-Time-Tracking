@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card">
+    <h2>Review Timesheets</h2>
+    <p>Review or print the timesheets of employees in your supervisory scope.</p>
+    <table>
+        <thead>
+            <tr>
+                <th>Employee</th>
+                <th>Employee ID</th>
+                <th>Role</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for employee in accessible_employees %}
+            <tr>
+                <td>{{ employee.FullName }}</td>
+                <td>{{ employee.EmployeeId }}</td>
+                <td>{{ employee.RoleName }}</td>
+                <td>
+                    <div class="button-row">
+                        <a class="button-link" href="{{ url_for('timesheet', employee_id=employee.EmployeeId) }}">Review</a>
+                        <a class="button-link" href="{{ url_for('create_manual_time_entry', employee_id=employee.EmployeeId) }}">Manual Entry</a>
+                        <a class="button-link" href="{{ url_for('timesheet', employee_id=employee.EmployeeId) }}#print-actions">Print / Export</a>
+                    </div>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="4">No subordinate timesheets are available for your role.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endblock %}

@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card narrow-card">
+    <h2>Add Manual Time Entry</h2>
+    <p><strong>Employee:</strong> {{ employee.FullName }}</p>
+    <p class="helper-text">Use manual entries for off-site work, technical issues, or other situations where the employee could not access the system.</p>
+    <form method="post" class="stack-form" data-track-changes="true" data-confirm-save-message="Save this manual time entry?">
+        <label>
+            Clock In
+            <input type="datetime-local" name="clock_in_time" value="{{ request.form.get('clock_in_time', '') }}" required>
+        </label>
+        <label>
+            Clock Out
+            <input type="datetime-local" name="clock_out_time" value="{{ request.form.get('clock_out_time', '') }}">
+        </label>
+        <label>
+            Entry Notes
+            <textarea name="notes" rows="3" placeholder="Recommended: note the assignment, issue, or correction context.">{{ request.form.get('notes', '') }}</textarea>
+        </label>
+        <label>
+            Reason For Change
+            <textarea name="change_reason" rows="3" placeholder="Explain why this manual entry is being added." required>{{ request.form.get('change_reason', '') }}</textarea>
+        </label>
+        <button type="submit">Add Manual Entry</button>
+    </form>
+</section>
+{% endblock %}

@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card">
+    <div class="timesheet-picker no-print">
+        <form method="get" action="{{ url_for('timesheet') }}" class="inline-form">
+            <input type="hidden" name="employee_id" value="{{ summary.employee_id }}">
+            <label>
+                Choose Pay Period
+                <select name="period_start" onchange="this.form.submit()">
+                    {% for period in available_periods %}
+                    <option value="{{ period.value }}" {% if period.value == period_start.isoformat() %}selected{% endif %}>{{ period.label }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+        </form>
+    </div>
+    <div class="timesheet-period-nav no-print">
+        <a class="button-link" href="{{ url_for('timesheet', period_start=previous_period_start, employee_id=summary.employee_id) }}">Previous Pay Period</a>
+        {% if next_period_start %}
+        <a class="button-link" href="{{ url_for('timesheet', period_start=next_period_start, employee_id=summary.employee_id) }}">Next Pay Period</a>
+        {% endif %}
+        {% if period_start != current_period_start %}
+        <a class="button-link" href="{{ url_for('timesheet', period_start=current_period_start, employee_id=summary.employee_id) }}">Current Pay Period</a>
+        {% endif %}
+    </div>
+    <div class="timesheet-actions no-print" id="print-actions">
+        {% if can_edit_times %}
+        <a class="button-link" href="{{ url_for('create_manual_time_entry', employee_id=summary.employee_id) }}">Add Manual Entry</a>
+        {% endif %}
+        <button type="button" onclick="window.print()">Print</button>
+        <a class="button-link" href="{{ url_for('export_timesheet_pdf', period_start=period_start, employee_id=summary.employee_id) }}">Export PDF</a>
+    </div>
+    <div class="timesheet-header">
+        <h2>Mississippi County, Arkansas</h2>
+        <h3>Economic Opprtunity Commision</h3>
+        <p class="timesheet-title">Employee Timesheet</p>
+        <div class="timesheet-meta">
+            <p><strong>Employee Name:</strong> {{ summary.full_name }}</p>
+            <p><strong>Employee ID:</strong> {{ summary.employee_id }}</p>
+            <p><strong>Pay Period:</strong> {{ period_start|datefmt }} - {{ period_end|datefmt }}</p>
+            <p><strong>Sick Leave Available:</strong> {{ "%.2f"|format(summary.sick_leave_hours) }}</p>
+            <p><strong>Annual Leave Available:</strong> {{ "%.2f"|format(summary.annual_leave_hours) }}</p>
+            {% if summary.is_head_start %}
+            <p><strong>Personal Time Available:</strong> {{ "%.2f"|format(summary.personal_leave_hours) }}</p>
+            {% endif %}
+        </div>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Clock In</th>
+                <th>Clock Out</th>
+                <th>Hours</th>
+                <th>Notes / Source</th>
+                {% if can_edit_times %}<th class="no-print">Edit</th>{% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in rows %}
+            <tr>
+                <td>{{ row.WorkDate|datefmt }}</td>
+                <td>{{ row.ClockInTime|time12 }}</td>
+                <td>{{ format_clock_boundary(row.ClockInTime, row.ClockOutTime) }}</td>
+                <td>{{ row.WorkedHours }}</td>
+                <td>{{ row.Notes or row.EntrySource }}</td>
+                {% if can_edit_times %}
+                <td class="no-print"><a class="button-link" href="{{ url_for('edit_time_entry', time_entry_id=row.TimeEntryId) }}">Edit</a></td>
+                {% endif %}
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="{% if can_edit_times %}6{% else %}5{% endif %}">No time entries for this period.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr>
+                <th colspan="3">Total</th>
+                <th>{{ "%.2f"|format(total_hours) }}</th>
+                <th></th>
+                {% if can_edit_times %}<th class="no-print"></th>{% endif %}
+            </tr>
+        </tfoot>
+    </table>
+</section>
+{% endblock %}

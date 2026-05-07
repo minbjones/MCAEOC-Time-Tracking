@@ -1,0 +1,33 @@
+# Python
+.venv/
+.venv_broken_20260506/
+__pycache__/
+*.py[cod]
+
+# Local temp / logs
+.codex_tmp/
+*.log
+flask_stdout.log
+flask_stderr.log
+mobile_api_stdout.log
+mobile_api_stderr.log
+
+# Secrets / local machine config
+employee_time_tracking_connection_string.txt
+android/local.properties
+
+# IDE / editor
+.idea/
+.vs/
+.vscode/
+*.iml
+
+# Android / Gradle
+android/.gradle/
+android/build/
+android/app/build/
+*.hprof
+
+# OS clutter
+Thumbs.db
+Desktop.ini

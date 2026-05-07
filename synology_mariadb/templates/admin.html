@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card">
+    <h2>Leave Approvals</h2>
+    <p>Supervisors can approve or deny leave for their subordinates. Owners can review all requests.</p>
+    <table>
+        <thead>
+            <tr>
+                <th>Employee</th>
+                <th>Employee ID</th>
+                <th>Type</th>
+                <th>Dates</th>
+                <th>Hours</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for request in pending_requests %}
+            <tr>
+                <td>{{ request.FullName }}</td>
+                <td>{{ request.EmployeeId }}</td>
+                <td>{{ request.LeaveType }}</td>
+                <td>{{ request.StartDate|datefmt }} to {{ request.EndDate|datefmt }}</td>
+                <td>{{ request.RequestedHours }}</td>
+                <td>
+                    <form method="post" action="{{ url_for('process_leave_request', leave_request_id=request.LeaveRequestId) }}" class="inline-form">
+                        <button type="submit" name="action" value="approve">Approve</button>
+                        <button type="submit" name="action" value="deny" class="danger">Deny</button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="6">No pending leave requests.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endblock %}

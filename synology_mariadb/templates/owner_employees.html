@@ -1,0 +1,317 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="grid">
+    {% if session.get("role_name") == "Owner" %}
+    <article class="card wide-card">
+        <h2>Add Funding Source</h2>
+        <p>Funding sources drive the payroll ID prefix. New employees in a funding source get the next available 6-digit sequence after that funding source's current highest payroll number.</p>
+        <form method="post" class="grid-form" data-track-changes="true" data-confirm-save-message="Add this funding source?">
+            <input type="hidden" name="action" value="add_department">
+            <label>
+                Funding ID
+                <input type="number" name="new_department_id" min="1" step="1" required>
+            </label>
+            <label>
+                Funding source
+                <input type="text" name="new_department_name" required>
+            </label>
+            <button type="submit" class="full-span">Add Funding Source</button>
+        </form>
+    </article>
+
+    <article class="card wide-card">
+        <h2>Create Employee</h2>
+        <p>Each employee stays linked to a funding source and can also be assigned to a supervisor through Workflow.</p>
+        <form method="post" class="grid-form" data-track-changes="true" data-confirm-save-message="Create this employee record?">
+            <label>
+                First name
+                <input type="text" name="first_name" required>
+            </label>
+            <label>
+                Last name
+                <input type="text" name="last_name" required>
+            </label>
+            <label>
+                Email
+                <input type="email" name="email" data-userid-source="email" required>
+            </label>
+            <label>
+                Funding Source
+                <select name="department_id" required>
+                    <option value="">Select funding source</option>
+                    {% for department in departments %}
+                    <option value="{{ department.DepartmentId }}">{{ department.DepartmentId }} {{ department.DepartmentName }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>
+                Role
+                <select name="role_name" required>
+                    {% for role in roles %}
+                    <option value="{{ role.RoleName }}" {% if role.RoleName == "User" %}selected{% endif %}>{{ role.RoleName }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>
+                Leave Type
+                <select name="personal_leave" required>
+                    <option value="0">Annual Leave</option>
+                    <option value="1">Personal Leave</option>
+                </select>
+            </label>
+            <label>
+                Workflow
+                <select name="reports_to_user_id">
+                    <option value="">No Workflow Supervisor</option>
+                    {% for supervisor in supervisors %}
+                    <option value="{{ supervisor.UserId }}">{{ supervisor.FullName }} ({{ supervisor.UserId }} | Funding {{ supervisor.DepartmentId }} {{ supervisor.DepartmentName }})</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>
+                Hire date
+                <input type="date" name="hire_date" required>
+            </label>
+            <label>
+                Temporary password
+                <input type="password" name="temporary_password" minlength="8" required>
+            </label>
+            <button type="submit" class="full-span">Create Employee</button>
+        </form>
+    </article>
+
+    <article class="card wide-card">
+        <h2>Import Employees From CSV</h2>
+        <p>Upload a UTF-8 CSV to create new employees and overwrite existing ones in one step. Existing employees are matched by <code>payroll_id</code> first, then <code>email</code>, then <code>user_id</code>. If a <code>payroll_id</code> does not already exist in the app database, the row is treated as a new employee and the database assigns the next payroll ID for that selected funding source using a 6-digit padded sequence. Each employee can be set to either <code>Annual Leave</code> or <code>Personal Leave</code>, not both. Imported rows reset the employee password to the CSV temporary password, or auto-generate a secure password if that field is blank. Owner rows must still include an explicit temporary password.</p>
+        <p class="helper-text helper-text-left">Required columns: <code>first_name</code>, <code>last_name</code>, <code>email</code>, <code>hire_date</code>, <code>temporary_password</code>, <code>personal_leave</code> or <code>leave_type</code>, <code>funding_id</code> or <code>funding_source</code>. Optional columns: <code>payroll_id</code>, <code>user_id</code>, <code>role_name</code>, <code>workflow</code>, <code>is_active</code>. Import also accepts the older <code>department_id</code>, <code>department_name</code>, and <code>reports_to_user_id</code> headers for compatibility.</p>
+        <pre class="csv-example">Funding Id,FirstName,LastName,Email,User Id,RoleName,LeaveType,Workflow,HireDate,IsActive,TemporaryPassword
+22,Jane,Doe,jane.doe@example.org,jane.doe,User,Annual,mary.manager,2026-04-15,Yes,
+21,Pat,Owner,pat.owner@example.org,pat.owner,Owner,Personal,,2026-04-15,Yes,OwnerTemp123!</pre>
+        <form method="post" enctype="multipart/form-data" class="stack-form" data-track-changes="true" data-confirm-save-message="Import this CSV and overwrite any matching employee records?">
+            <input type="hidden" name="action" value="import_csv">
+            <label>
+                CSV file
+                <input type="file" name="csv_file" accept=".csv,text/csv" required>
+            </label>
+            <button type="submit">Import CSV</button>
+        </form>
+    </article>
+
+    <article class="card wide-card">
+        <h2>Export Employees</h2>
+        <p>Download the full employee list in either CSV or plain text format.</p>
+        <div class="button-row">
+            <a class="button-link" href="{{ url_for('export_employees', format='csv') }}">Export CSV</a>
+            <a class="button-link" href="{{ url_for('export_employees', format='txt') }}">Export TXT</a>
+        </div>
+    </article>
+
+    {% if import_payroll_id_mappings %}
+    <article class="card wide-card">
+        <h2>Import Payroll ID Mapping</h2>
+        <p>Download the original CSV payroll IDs alongside the actual payroll IDs stored in the database for the most recent import.</p>
+        <div class="button-row">
+            <a class="button-link" href="{{ url_for('download_import_payroll_mapping') }}">Download Payroll ID Mapping CSV</a>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Employee ID</th>
+                        <th>CSV Payroll ID</th>
+                        <th>Database Payroll ID</th>
+                        <th>Name</th>
+                        <th>Result</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in import_payroll_id_mappings[:10] %}
+                    <tr>
+                        <td>{{ item.employee_id }}</td>
+                        <td>{{ item.csv_payroll_id or '' }}</td>
+                        <td>{{ item.database_payroll_id }}</td>
+                        <td>{{ item.full_name }}</td>
+                        <td>{{ item.result }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if import_payroll_id_mappings|length > 10 %}
+        <p class="helper-text helper-text-left">Showing the first 10 rows. Download the CSV for the full mapping.</p>
+        {% endif %}
+    </article>
+    {% endif %}
+
+    {% if generated_import_passwords %}
+    <article class="card wide-card password-results-card">
+        <h2>Generated Temporary Passwords</h2>
+        <p>These auto-generated passwords are shown once after import. Share them securely with the employees listed below.</p>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Payroll ID</th>
+                        <th>Employee ID</th>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Temporary Password</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in generated_import_passwords %}
+                    <tr>
+                        <td>{{ item.payroll_id }}</td>
+                        <td>{{ item.employee_id }}</td>
+                        <td>{{ item.full_name }}</td>
+                        <td>{{ item.email }}</td>
+                        <td><code>{{ item.temporary_password }}</code></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </article>
+    {% endif %}
+    {% endif %}
+
+    <article class="card wide-card">
+        <h2>Employee List</h2>
+        {% if employees %}
+        <form method="get" action="{{ url_for('owner_employees') }}" class="inline-form">
+            <label>
+                Select Employee
+                <select name="employee_id" onchange="this.form.submit()">
+                    {% for employee in employees %}
+                    <option value="{{ employee.EmployeeId }}" {% if selected_employee and employee.EmployeeId == selected_employee.EmployeeId %}selected{% endif %}>{{ employee.LastName }}, {{ employee.FirstName }} (Employee {{ employee.EmployeeId }} | Payroll {{ employee.PayrollId }})</option>
+                    {% endfor %}
+                </select>
+            </label>
+        </form>
+        {% else %}
+        <p>No employees are available in your scope.</p>
+        {% endif %}
+    </article>
+
+    <article class="card wide-card">
+        <h2>Edit Employee</h2>
+        {% if selected_employee %}
+        <form method="post" class="grid-form" data-track-changes="true" data-confirm-save-message="Save changes to this employee?">
+            <input type="hidden" name="action" value="update">
+            <input type="hidden" name="employee_id" value="{{ selected_employee.EmployeeId }}">
+            <label>
+                First name
+                <input type="text" name="first_name" value="{{ selected_employee.FirstName }}" required>
+            </label>
+            <label>
+                Last name
+                <input type="text" name="last_name" value="{{ selected_employee.LastName }}" required>
+            </label>
+            <label>
+                Email
+                <input type="email" name="email" value="{{ selected_employee.Email }}" data-userid-source="email" required>
+            </label>
+            <label>
+                User ID
+                <input type="text" name="user_id" value="{{ selected_employee.UserId }}" data-userid-target="true" required>
+            </label>
+            <label>
+                Funding Source
+                <select name="department_id" required>
+                    {% for department in departments %}
+                    <option value="{{ department.DepartmentId }}" {% if department.DepartmentId == selected_employee.DepartmentId %}selected{% endif %}>{{ department.DepartmentId }} {{ department.DepartmentName }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>
+                Payroll ID
+                <input type="text" value="{{ selected_employee.PayrollId }}" readonly>
+            </label>
+            <label>
+                Role
+                <select name="role_name" required>
+                    {% for role in roles %}
+                    <option value="{{ role.RoleName }}" {% if role.RoleName == selected_employee.RoleName %}selected{% endif %}>{{ role.RoleName }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>
+                Leave Type
+                <select name="personal_leave" required>
+                    <option value="0" {% if not selected_employee.IsHeadStart %}selected{% endif %}>Annual Leave</option>
+                    <option value="1" {% if selected_employee.IsHeadStart %}selected{% endif %}>Personal Leave</option>
+                </select>
+            </label>
+            <label>
+                Workflow
+                <select name="reports_to_user_id">
+                    <option value="">No Workflow Supervisor</option>
+                    {% for supervisor in supervisors %}
+                    <option value="{{ supervisor.UserId }}" {% if selected_employee.ReportsToUserId == supervisor.UserId %}selected{% endif %}>{{ supervisor.FullName }} ({{ supervisor.UserId }} | Funding {{ supervisor.DepartmentId }} {{ supervisor.DepartmentName }})</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>
+                Hire date
+                <input type="date" name="hire_date" value="{{ selected_employee.HireDate.strftime('%Y-%m-%d') if selected_employee.HireDate else '' }}" data-original-hire-date="{{ selected_employee.HireDate.strftime('%Y-%m-%d') if selected_employee.HireDate else '' }}" required>
+            </label>
+            <label>
+                Status
+                <select name="is_active" required>
+                    <option value="1" {% if selected_employee.IsActive == 'Yes' %}selected{% endif %}>Yes</option>
+                    <option value="0" {% if selected_employee.IsActive != 'Yes' %}selected{% endif %}>No</option>
+                </select>
+            </label>
+            <button type="submit" class="full-span">Save Changes</button>
+        </form>
+
+        {% if session.get("role_name") == "Owner" %}
+        <hr>
+        <form method="post" class="grid-form" data-track-changes="true" data-confirm-save-message="Reset this employee password?">
+            <input type="hidden" name="action" value="reset_password">
+            <input type="hidden" name="employee_id" value="{{ selected_employee.EmployeeId }}">
+            <label>
+                Reset password
+                <input type="password" name="temporary_password" minlength="8" placeholder="Enter temporary password" required>
+            </label>
+            <button type="submit">Reset Password</button>
+        </form>
+        {% endif %}
+        {% else %}
+        <p>Select an employee to edit.</p>
+        {% endif %}
+    </article>
+</section>
+<script>
+    (function () {
+        const forms = document.querySelectorAll("form");
+        forms.forEach(function (form) {
+            const emailInput = form.querySelector("[data-userid-source='email']");
+            const userIdInput = form.querySelector("[data-userid-target='true']");
+
+            if (!emailInput || !userIdInput) {
+                return;
+            }
+
+            function clean(value) {
+                return (value || "").toLowerCase().trim();
+            }
+
+            function updateUserId() {
+                if (!userIdInput.value || userIdInput.dataset.autoGenerated === "true") {
+                    userIdInput.value = clean(emailInput.value);
+                    userIdInput.dataset.autoGenerated = "true";
+                }
+            }
+
+            userIdInput.dataset.autoGenerated = "true";
+            userIdInput.addEventListener("input", function () {
+                userIdInput.dataset.autoGenerated = "false";
+            });
+            emailInput.addEventListener("input", updateUserId);
+            updateUserId();
+        });
+    }());
+</script>
+{% endblock %}

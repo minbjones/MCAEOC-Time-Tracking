@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card narrow-card">
+    <h2>Enter Leave Hours</h2>
+    <p class="helper-text">Use positive hours to add leave and negative hours to deduct leave. Notes are saved with the entry for audit reference.</p>
+    <form method="post" class="stack-form" data-track-changes="true" data-confirm-save-message="Post this manual leave adjustment?">
+        <label>
+            Employee
+            <select name="employee_id" onchange="window.location.href='{{ url_for('manual_leave_entry') }}?employee_id=' + this.value;">
+                {% for employee in employees %}
+                <option value="{{ employee.EmployeeId }}" {% if selected_employee and employee.EmployeeId == selected_employee.EmployeeId %}selected{% endif %}>
+                    {{ employee.FullName }} ({{ employee.RoleName }})
+                </option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>
+            Leave Type
+            <select name="leave_type" required>
+                {% if selected_employee and selected_employee.IsHeadStart %}
+                <option value="Personal" {% if request.form.get('leave_type') == 'Personal' %}selected{% endif %}>Personal</option>
+                {% else %}
+                <option value="Annual" {% if request.form.get('leave_type') == 'Annual' %}selected{% endif %}>Annual Leave</option>
+                {% endif %}
+                <option value="Sick" {% if request.form.get('leave_type') == 'Sick' %}selected{% endif %}>Sick</option>
+            </select>
+        </label>
+        <label>
+            Hours
+            <input type="number" name="hours" step="0.25" value="{{ request.form.get('hours', '') }}" required>
+        </label>
+        <label>
+            Notes
+            <textarea name="notes" rows="3" placeholder="Example: entered from approved paper leave slip or balance correction.">{{ request.form.get('notes', '') }}</textarea>
+        </label>
+        <button type="submit">Post Leave Adjustment</button>
+    </form>
+</section>
+{% endblock %}

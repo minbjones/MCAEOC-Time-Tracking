@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Employee Time Tracking</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="office-clock-bg" aria-hidden="true"></div>
+    <header class="site-header{% if request.endpoint == 'login' and not session.get('user') %} site-header-login{% endif %}">
+        {% if request.endpoint == 'login' and not session.get("user") %}
+        <div class="site-brand site-brand-login">
+            <img
+                class="site-brand-logo"
+                src="{{ url_for('static', filename='cap_huggy.png') }}"
+                alt="MCAEOC logo"
+            >
+            <div class="site-brand-copy">
+                <p class="site-brand-eyebrow">MCAEOC</p>
+                <h1>Employee Time Tracking</h1>
+                <p>Clock time, manage leave, and print bi-weekly timesheets.</p>
+            </div>
+        </div>
+        {% else %}
+        <div class="site-brand">
+            <img
+                class="site-brand-logo site-brand-logo-small"
+                src="{{ url_for('static', filename='cap_huggy.png') }}"
+                alt="MCAEOC logo"
+            >
+            <div class="site-brand-copy">
+                <p class="site-brand-label">MCAEOC</p>
+                <h1>Employee Time Tracking</h1>
+                <p>Clock time, manage leave, and print bi-weekly timesheets.</p>
+            </div>
+        </div>
+        {% endif %}
+        {% if session.get("user") %}
+        <nav class="nav-links">
+            <a href="{{ url_for('dashboard') }}">Dashboard</a>
+            {% if session.get("role_name") in ["Owner", "Leave Manager"] %}
+            <a href="{{ url_for('manual_leave_entry') }}">Enter Leave Hours</a>
+            {% endif %}
+            {% if session.get("role_name") in ["Owner", "Executive Director", "Director", "Manager"] %}
+            <a href="{{ url_for('admin_dashboard') }}">
+                Leave Approvals
+            </a>
+            <a href="{{ url_for('live_board') }}">Live Board</a>
+            {% endif %}
+            {% if session.get("role_name") in ["Executive Director", "Director", "Manager"] %}
+            <a href="{{ url_for('review_timesheets') }}">Review Timesheets</a>
+            {% endif %}
+            {% if session.get("role_name") in ["Owner", "Executive Director"] %}
+            <a href="{{ url_for('owner_employees') }}">Employees</a>
+            {% endif %}
+            <a href="{{ url_for('logout') }}">Log Out</a>
+        </nav>
+        {% endif %}
+    </header>
+
+    <main class="page-shell">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <section class="flash-stack">
+                    {% for category, message in messages %}
+                    <div class="flash flash-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                </section>
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+    <footer class="site-footer">
+        <p>Copyright Blanton Jones, Sr.</p>
+    </footer>
+    {% if session.get("user") %}
+    <script>
+        (function () {
+            const timeoutMs = 10 * 60 * 1000;
+            let logoutTimer = null;
+
+            function resetLogoutTimer() {
+                window.clearTimeout(logoutTimer);
+                logoutTimer = window.setTimeout(function () {
+                    window.location.href = "{{ url_for('logout', reason='timeout') }}";
+                }, timeoutMs);
+            }
+
+            ["click", "keydown", "mousemove", "scroll"].forEach(function (eventName) {
+                window.addEventListener(eventName, resetLogoutTimer, { passive: true });
+            });
+            resetLogoutTimer();
+
+            const trackedForms = document.querySelectorAll("form[data-track-changes='true']");
+            trackedForms.forEach(function (form) {
+                form.addEventListener("submit", function (event) {
+                    let message = form.dataset.confirmSaveMessage;
+                    const hireDateInput = form.querySelector("[data-original-hire-date]");
+
+                    if (hireDateInput && hireDateInput.value !== hireDateInput.dataset.originalHireDate) {
+                        if (!window.confirm("Are you sure you would like to change the hire date?")) {
+                            event.preventDefault();
+                            return;
+                        }
+                    }
+
+                    if (message && !window.confirm(message)) {
+                        event.preventDefault();
+                        return;
+                    }
+                });
+            });
+        }());
+    </script>
+    {% endif %}
+</body>
+</html>

@@ -1,0 +1,70 @@
+name: Build Synology Images
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - "synology_mariadb/**"
+      - ".github/workflows/synology-ghcr-images.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  WEB_IMAGE_NAME: mcaeoc-time-tracking-synology-web
+  MOBILE_API_IMAGE_NAME: mcaeoc-time-tracking-synology-mobile-api
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check Out Repository
+        uses: actions/checkout@v4
+
+      - name: Log In To GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker Metadata For Web
+        id: meta_web
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.WEB_IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest
+            type=sha,format=short
+
+      - name: Build And Push Web Image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./synology_mariadb
+          file: ./synology_mariadb/Dockerfile
+          push: true
+          tags: ${{ steps.meta_web.outputs.tags }}
+          labels: ${{ steps.meta_web.outputs.labels }}
+
+      - name: Extract Docker Metadata For Mobile API
+        id: meta_mobile
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.MOBILE_API_IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest
+            type=sha,format=short
+
+      - name: Build And Push Mobile API Image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./synology_mariadb
+          file: ./synology_mariadb/mobile_api/Dockerfile
+          push: true
+          tags: ${{ steps.meta_mobile.outputs.tags }}
+          labels: ${{ steps.meta_mobile.outputs.labels }}

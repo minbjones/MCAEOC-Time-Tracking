@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card narrow-card">
+    <h2>Edit Time Entry</h2>
+    <p><strong>Employee:</strong> {{ entry.FullName }}</p>
+    <p class="helper-text">Use this screen to correct missed punches, shift dates, or other timesheet errors. Add a brief reason so the audit trail stays clear.</p>
+    <form method="post" class="stack-form" data-track-changes="true" data-confirm-save-message="Save the updated clock times?">
+        <label>
+            Clock In
+            <input type="datetime-local" name="clock_in_time" value="{{ request.form.get('clock_in_time', entry.ClockInTime.strftime('%Y-%m-%dT%H:%M') if entry.ClockInTime else '') }}" required>
+        </label>
+        <label>
+            Clock Out
+            <input type="datetime-local" name="clock_out_time" value="{{ request.form.get('clock_out_time', entry.ClockOutTime.strftime('%Y-%m-%dT%H:%M') if entry.ClockOutTime else '') }}">
+        </label>
+        <label>
+            Entry Notes
+            <textarea name="notes" rows="3" placeholder="Recommended: brief note for final approval clarity.">{{ request.form.get('notes', entry.Notes or '') }}</textarea>
+        </label>
+        <label>
+            Reason For Change
+            <textarea name="change_reason" rows="3" placeholder="Explain why this correction is needed." required>{{ request.form.get('change_reason', '') }}</textarea>
+        </label>
+        <button type="submit">Save Time Entry</button>
+    </form>
+</section>
+<section class="card">
+    <h3>Audit History</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Changed By</th>
+                <th>Changed At</th>
+                <th>Action</th>
+                <th>Reason</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for audit in audit_rows %}
+            <tr>
+                <td>{{ audit.ChangedByFullName }}</td>
+                <td>{{ audit.ChangedAt|datetime12 }}</td>
+                <td>{{ audit.ActionType }}</td>
+                <td>{{ audit.ChangeReason }}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="4">No audit history recorded for this entry yet.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endblock %}

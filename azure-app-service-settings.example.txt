@@ -1,0 +1,12 @@
+FLASK_SECRET_KEY=replace-with-a-long-random-secret
+EMPLOYEE_TIME_TRACKING_CONNECTION_STRING=Driver={ODBC Driver 18 for SQL Server};Server=tcp:your-server.database.windows.net,1433;Database=EmployeeTimeTracking;Uid=your-sql-login;Pwd=your-password;Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_FROM_EMAIL=
+SMTP_FROM_NAME=MCAEOC Employee Time Tracking
+SMTP_USERNAME=
+SMTP_PASSWORD=
+SMTP_USE_TLS=true
+SMTP_USE_SSL=false
+GUNICORN_WORKERS=2
+GUNICORN_TIMEOUT=120

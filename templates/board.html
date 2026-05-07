@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card">
+    <div class="board-header">
+        <h2>Live In/Out Board</h2>
+        <p>The board refreshes every 30 seconds and shows the latest in/out status for employees in your reporting scope.</p>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th>Employee</th>
+                <th>Employee ID</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Clock In</th>
+                <th>Clock Out</th>
+                {% if can_manage_clocking %}<th class="no-print">Clock Action</th>{% endif %}
+                {% if can_edit_times %}<th class="no-print">Edit</th>{% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in board_rows %}
+            <tr>
+                <td>{{ row.FullName }}</td>
+                <td>{{ row.EmployeeId }}</td>
+                <td>{{ row.RoleName }}</td>
+                <td>{% if row.ClockInTime and not row.ClockOutTime %}Clocked In{% elif row.ClockInTime %}Clocked Out{% else %}No Entry{% endif %}</td>
+                <td>{% if row.ClockInTime %}{{ row.ClockInTime|datetime12 }}{% endif %}</td>
+                <td>{% if row.ClockOutTime %}{{ format_clock_boundary(row.ClockInTime, row.ClockOutTime) }}{% endif %}</td>
+                {% if can_manage_clocking %}
+                <td class="no-print">
+                    <form method="post" action="{{ url_for('manage_employee_clock', employee_id=row.EmployeeId) }}">
+                        {% if row.ClockInTime and not row.ClockOutTime %}
+                        <input type="hidden" name="action" value="clock_out">
+                        <button type="submit" class="danger">Clock Out</button>
+                        {% else %}
+                        <input type="hidden" name="action" value="clock_in">
+                        <button type="submit">Clock In</button>
+                        {% endif %}
+                    </form>
+                </td>
+                {% endif %}
+                {% if can_edit_times %}
+                <td class="no-print">
+                    {% if row.TimeEntryId %}
+                    <a class="button-link" href="{{ url_for('edit_time_entry', time_entry_id=row.TimeEntryId) }}">Edit</a>
+                    {% endif %}
+                </td>
+                {% endif %}
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="{% if can_manage_clocking and can_edit_times %}8{% elif can_manage_clocking or can_edit_times %}7{% else %}6{% endif %}">No employees found for your reporting scope.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+<script>
+    window.setTimeout(function () {
+        window.location.reload();
+    }, 30000);
+</script>
+{% endblock %}
