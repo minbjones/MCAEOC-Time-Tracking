@@ -204,43 +204,6 @@
         </div>
     </article>
 
-    {% if import_payroll_id_mappings %}
-    <article class="card wide-card">
-        <h2>Import Payroll ID Mapping</h2>
-        <p>Download the original CSV payroll IDs alongside the actual payroll IDs stored in the database for the most recent import.</p>
-        <div class="button-row">
-            <a class="button-link" href="{{ url_for('download_import_payroll_mapping') }}">Download Payroll ID Mapping CSV</a>
-        </div>
-        <div class="table-wrap">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Employee ID</th>
-                        <th>CSV Payroll ID</th>
-                        <th>Database Payroll ID</th>
-                        <th>Name</th>
-                        <th>Result</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for item in import_payroll_id_mappings[:10] %}
-                    <tr>
-                        <td>{{ item.employee_id }}</td>
-                        <td>{{ item.csv_payroll_id or '' }}</td>
-                        <td>{{ item.database_payroll_id }}</td>
-                        <td>{{ item.full_name }}</td>
-                        <td>{{ item.result }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        {% if import_payroll_id_mappings|length > 10 %}
-        <p class="helper-text helper-text-left">Showing the first 10 rows. Download the CSV for the full mapping.</p>
-        {% endif %}
-    </article>
-    {% endif %}
-
     <article class="card wide-card">
         <h2>Add Funding Source</h2>
         <p>Funding sources drive the payroll ID prefix. New employees in a funding source get the next available 6-digit sequence after that funding source's current highest payroll number.</p>
