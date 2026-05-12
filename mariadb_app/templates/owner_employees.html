@@ -71,10 +71,10 @@
             </label>
             <label>
                 Workflow
-                <select name="reports_to_user_id">
+                <select name="reports_to_employee_id">
                     <option value="">No Workflow Supervisor</option>
                     {% for supervisor in supervisors %}
-                    <option value="{{ supervisor.UserId }}" {% if selected_employee.ReportsToUserId == supervisor.UserId %}selected{% endif %}>{{ supervisor.FullName }} ({{ supervisor.UserId }} | Funding {{ supervisor.DepartmentId }} {{ supervisor.DepartmentName }})</option>
+                    <option value="{{ supervisor.EmployeeId }}" {% if selected_employee.ReportsToUserId == supervisor.UserId %}selected{% endif %}>{{ supervisor.FullName }} ({{ supervisor.UserId }} | Funding {{ supervisor.DepartmentId }} {{ supervisor.DepartmentName }})</option>
                     {% endfor %}
                 </select>
             </label>
@@ -163,10 +163,10 @@
             </label>
             <label>
                 Workflow
-                <select name="reports_to_user_id">
+                <select name="reports_to_employee_id">
                     <option value="">No Workflow Supervisor</option>
                     {% for supervisor in supervisors %}
-                    <option value="{{ supervisor.UserId }}">{{ supervisor.FullName }} ({{ supervisor.UserId }} | Funding {{ supervisor.DepartmentId }} {{ supervisor.DepartmentName }})</option>
+                    <option value="{{ supervisor.EmployeeId }}">{{ supervisor.FullName }} ({{ supervisor.UserId }} | Funding {{ supervisor.DepartmentId }} {{ supervisor.DepartmentName }})</option>
                     {% endfor %}
                 </select>
             </label>

@@ -610,6 +610,19 @@ def fetch_employee_by_id(cursor, employee_id: int):
     return cursor.fetchone()
 
 
+def fetch_employee_user_id(cursor, employee_id: int) -> Optional[str]:
+    cursor.execute(
+        """
+        SELECT UserId
+        FROM dbo.Employees
+        WHERE EmployeeId = ?
+        """,
+        employee_id,
+    )
+    row = cursor.fetchone()
+    return (row.UserId or "").strip() if row is not None and row.UserId else None
+
+
 def make_employee_inactive(cursor, employee_id: int) -> bool:
     cursor.execute(
         """
@@ -648,6 +661,22 @@ def reassign_employee_reports(cursor, previous_user_id: str, next_user_id: Optio
         """,
         normalized_previous,
     )
+
+
+def resolve_supervisor_form_value(cursor, employee_id_value: str, user_id_value: Optional[str]) -> Optional[str]:
+    selected_employee_id = (employee_id_value or "").strip()
+    if selected_employee_id:
+        try:
+            selected_supervisor_id = int(selected_employee_id)
+        except ValueError as exc:
+            raise ValueError("Workflow supervisor selection is invalid.") from exc
+        resolved_user_id = fetch_employee_user_id(cursor, selected_supervisor_id)
+        if not resolved_user_id:
+            raise ValueError("Workflow supervisor was not found.")
+        return resolved_user_id
+
+    normalized_user_id = (user_id_value or "").strip()
+    return normalized_user_id or None
 
 
 def delete_employee_records(conn, cursor, employee_id: int):
@@ -2120,7 +2149,6 @@ def owner_employees():
             role_name = request.form.get("role_name", "User")
             department_id_value = request.form.get("department_id", "").strip()
             personal_leave = 1 if request.form.get("personal_leave") == "1" else 0
-            reports_to_user_id = request.form.get("reports_to_user_id") or None
             hire_date = request.form.get("hire_date")
 
             if action == "add_department":
@@ -2165,6 +2193,15 @@ def owner_employees():
                     return redirect(url_for("owner_employees"))
                 if not department_id_value:
                     flash("Funding source is required.", "error")
+                    return redirect(url_for("owner_employees"))
+                try:
+                    reports_to_user_id = resolve_supervisor_form_value(
+                        cursor,
+                        request.form.get("reports_to_employee_id", ""),
+                        request.form.get("reports_to_user_id"),
+                    )
+                except ValueError as exc:
+                    flash(str(exc), "error")
                     return redirect(url_for("owner_employees"))
                 user_id = user_id or build_default_user_id(first_name, last_name, email)
                 department_id = int(department_id_value)
@@ -2607,6 +2644,15 @@ def owner_employees():
                     return redirect(url_for("owner_employees", employee_id=employee_id))
                 if not department_id_value:
                     flash("Funding source is required.", "error")
+                    return redirect(url_for("owner_employees", employee_id=employee_id))
+                try:
+                    reports_to_user_id = resolve_supervisor_form_value(
+                        cursor,
+                        request.form.get("reports_to_employee_id", ""),
+                        request.form.get("reports_to_user_id"),
+                    )
+                except ValueError as exc:
+                    flash(str(exc), "error")
                     return redirect(url_for("owner_employees", employee_id=employee_id))
                 user_id = user_id or build_default_user_id(first_name, last_name, email)
                 department_id = int(department_id_value)
