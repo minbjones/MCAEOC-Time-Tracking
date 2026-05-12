@@ -181,18 +181,20 @@ def normalize_user_id_candidate(value: str) -> str:
 
 
 def build_default_user_id(first_name: str, last_name: str, email: str = "") -> str:
-    email = (email or "").strip().lower()
-    if email:
-        return email
-
     first = normalize_user_id_candidate(first_name)
     last = normalize_user_id_candidate(last_name)
     if first and last:
         return f"{first}.{last}"
+    email = (email or "").strip().lower()
+    if email:
+        email_name = email.split("@", 1)[0]
+        normalized_email_name = normalize_user_id_candidate(email_name)
+        if normalized_email_name:
+            return normalized_email_name
     return first or last
 
 
-def generate_temporary_password(length: int = 16) -> str:
+def generate_temporary_password(length: int = 10) -> str:
     uppercase = "ABCDEFGHJKLMNPQRSTUVWXYZ"
     lowercase = "abcdefghijkmnopqrstuvwxyz"
     digits = "23456789"
@@ -211,6 +213,20 @@ def generate_temporary_password(length: int = 16) -> str:
         password = "".join(password_chars)
         if len(password) >= 8:
             return password
+
+
+def validate_password_complexity(password: str) -> Optional[str]:
+    if len(password) < 8:
+        return "Password must be at least 8 characters."
+    if not re.search(r"[A-Z]", password):
+        return "Password must include at least one uppercase letter."
+    if not re.search(r"[a-z]", password):
+        return "Password must include at least one lowercase letter."
+    if not re.search(r"[0-9]", password):
+        return "Password must include at least one number."
+    if not re.search(r"[^A-Za-z0-9]", password):
+        return "Password must include at least one special character."
+    return None
 
 
 def env_flag(name: str, default: bool = False) -> bool:
@@ -367,7 +383,7 @@ def parse_employee_import_csv(uploaded_file) -> list[dict]:
     normalized_fieldnames = {
         normalize_csv_column_name(fieldname): fieldname for fieldname in reader.fieldnames
     }
-    required_columns = {"first_name", "last_name", "email", "hire_date", "temporary_password", "personal_leave"}
+    required_columns = {"first_name", "last_name", "email", "hire_date", "personal_leave"}
     missing_columns = [column for column in required_columns if column not in normalized_fieldnames]
     if missing_columns:
         raise ValueError(
@@ -1195,8 +1211,9 @@ def change_password():
         new_password = request.form["new_password"]
         confirm_password = request.form["confirm_password"]
 
-        if len(new_password) < 8:
-            flash("Password must be at least 8 characters.", "error")
+        complexity_error = validate_password_complexity(new_password)
+        if complexity_error:
+            flash(complexity_error, "error")
             return render_template("change_password.html")
 
         if new_password != confirm_password:
@@ -1741,7 +1758,6 @@ def owner_employees():
                     return redirect(url_for("owner_employees"))
                 user_id = user_id or build_default_user_id(first_name, last_name, email)
                 department_id = int(department_id_value)
-                temporary_password = request.form["temporary_password"]
                 existing_employee = find_employee_duplicate(cursor, email, user_id)
 
                 if existing_employee is not None:
@@ -1753,57 +1769,66 @@ def owner_employees():
                         "error",
                     )
                     return redirect(url_for("owner_employees"))
-                if len(temporary_password) < 8:
-                    flash("Temporary password must be at least 8 characters.", "error")
-                else:
-                    salt = os.urandom(8).hex().upper()
-                    password_hash = hash_password(salt, temporary_password)
-                    try:
-                        cursor.execute(
-                            """
-                            EXEC dbo.usp_CreateEmployee
-                                @FirstName = ?,
-                                @LastName = ?,
-                                @Email = ?,
-                                @UserId = ?,
-                                @RoleName = ?,
-                                @DepartmentId = ?,
-                                @PersonalLeave = ?,
-                                @ReportsToUserId = ?,
-                                @HireDate = ?,
-                                @PasswordSalt = ?,
-                                @PasswordHash = ?
-                            """,
-                            first_name,
-                            last_name,
-                            email,
-                            user_id,
-                            role_name,
-                            department_id,
-                            personal_leave,
-                            reports_to_user_id,
-                            hire_date,
-                            salt,
-                            password_hash,
+                temporary_password = generate_temporary_password()
+                salt = os.urandom(8).hex().upper()
+                password_hash = hash_password(salt, temporary_password)
+                try:
+                    cursor.execute(
+                        """
+                        EXEC dbo.usp_CreateEmployee
+                            @FirstName = ?,
+                            @LastName = ?,
+                            @Email = ?,
+                            @UserId = ?,
+                            @RoleName = ?,
+                            @DepartmentId = ?,
+                            @PersonalLeave = ?,
+                            @ReportsToUserId = ?,
+                            @HireDate = ?,
+                            @PasswordSalt = ?,
+                            @PasswordHash = ?
+                        """,
+                        first_name,
+                        last_name,
+                        email,
+                        user_id,
+                        role_name,
+                        department_id,
+                        personal_leave,
+                        reports_to_user_id,
+                        hire_date,
+                        salt,
+                        password_hash,
+                    )
+                    created_row = cursor.fetchone()
+                    conn.commit()
+                except pyodbc.Error as exc:
+                    conn.rollback()
+                    duplicate_employee = find_employee_duplicate(cursor, email, user_id)
+                    if duplicate_employee is not None:
+                        flash(
+                            "Duplicate employee found. "
+                            f"{duplicate_employee.FirstName} {duplicate_employee.LastName} "
+                            f"(Employee {duplicate_employee.EmployeeId}, Payroll {duplicate_employee.PayrollId}) "
+                            "already uses that email or user ID.",
+                            "error",
                         )
-                        conn.commit()
-                    except pyodbc.Error as exc:
-                        conn.rollback()
-                        duplicate_employee = find_employee_duplicate(cursor, email, user_id)
-                        if duplicate_employee is not None:
-                            flash(
-                                "Duplicate employee found. "
-                                f"{duplicate_employee.FirstName} {duplicate_employee.LastName} "
-                                f"(Employee {duplicate_employee.EmployeeId}, Payroll {duplicate_employee.PayrollId}) "
-                                "already uses that email or user ID.",
-                                "error",
-                            )
-                            return redirect(url_for("owner_employees"))
-                        flash(str(exc).strip() or "Could not create employee.", "error")
                         return redirect(url_for("owner_employees"))
-
-                    flash("Employee created. They will be asked to change their password on first login.", "success")
+                    flash(str(exc).strip() or "Could not create employee.", "error")
                     return redirect(url_for("owner_employees"))
+
+                if created_row is not None:
+                    session["generated_import_passwords"] = [
+                        {
+                            "payroll_id": getattr(created_row, "PayrollId", ""),
+                            "employee_id": getattr(created_row, "EmployeeId", ""),
+                            "full_name": f"{first_name} {last_name}".strip(),
+                            "email": email,
+                            "temporary_password": temporary_password,
+                        }
+                    ]
+                flash("Employee created. A random temporary password was generated and the employee will be asked to change it on first login.", "success")
+                return redirect(url_for("owner_employees"))
             elif action == "import_csv":
                 if viewer_role != "Owner":
                     flash("Only the Owner can import employees.", "error")
@@ -1837,15 +1862,7 @@ def owner_employees():
                             raise ValueError("First name and last name are required.")
 
                         role_name = row["role_name"] or "User"
-                        temporary_password = row["temporary_password"]
-                        password_was_generated = False
-                        if not temporary_password:
-                            if role_name == "Owner":
-                                raise ValueError("Owner rows must include a temporary password.")
-                            temporary_password = generate_temporary_password()
-                            password_was_generated = True
-                        elif len(temporary_password) < 8:
-                            raise ValueError("Temporary password must be at least 8 characters.")
+                        temporary_password = generate_temporary_password()
 
                         email = row["email"]
                         if not email:
@@ -1997,7 +2014,7 @@ def owner_employees():
                             )
                         conn.commit()
                         employees_by_payroll_id, employees_by_email, employees_by_user_id = fetch_employee_import_lookup(cursor)
-                        if password_was_generated and matched_employee is not None:
+                        if matched_employee is not None:
                             generated_passwords.append(
                                 {
                                     "line_number": row["line_number"],
@@ -2063,11 +2080,7 @@ def owner_employees():
                     flash("You do not have access to that employee.", "error")
                     return redirect(url_for("owner_employees"))
 
-                temporary_password = request.form.get("temporary_password", "")
-                if len(temporary_password) < 8:
-                    flash("Temporary password must be at least 8 characters.", "error")
-                    return redirect(url_for("owner_employees", employee_id=employee_id))
-
+                temporary_password = generate_temporary_password()
                 salt = os.urandom(8).hex().upper()
                 password_hash = hash_password(salt, temporary_password)
                 cursor.execute(
@@ -2082,7 +2095,16 @@ def owner_employees():
                     password_hash,
                 )
                 conn.commit()
-                flash("Password reset. The employee will be prompted to change it at next login.", "success")
+                session["generated_import_passwords"] = [
+                    {
+                        "employee_id": employee_id,
+                        "payroll_id": request.form.get("payroll_id", ""),
+                        "full_name": request.form.get("employee_name", "").strip(),
+                        "email": request.form.get("employee_email", "").strip(),
+                        "temporary_password": temporary_password,
+                    }
+                ]
+                flash("Password reset. A random temporary password was generated and the employee will be prompted to change it at next login.", "success")
                 return redirect(url_for("owner_employees", employee_id=employee_id))
             else:
                 employee_id = int(request.form["employee_id"])
