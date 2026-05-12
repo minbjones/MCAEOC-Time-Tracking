@@ -206,8 +206,8 @@
 
     <article class="card wide-card">
         <h2>Add Funding Source</h2>
-        <p>Funding sources drive the payroll ID prefix. New employees in a funding source get the next available 6-digit sequence after that funding source's current highest payroll number.</p>
-        <form method="post" class="grid-form" data-track-changes="true" data-confirm-save-message="Add this funding source?">
+        <p>Funding sources drive the payroll ID prefix. New employees in a funding source get the next available 6-digit sequence after that funding source's current highest payroll number. If the Funding ID already exists, saving here will overwrite the current funding source name for that ID.</p>
+        <form method="post" class="grid-form" data-track-changes="true" data-confirm-save-message="Are you sure you want to save this funding source? If the Funding ID already exists, the current database entry for that Funding ID will be overwritten.">
             <input type="hidden" name="action" value="add_department">
             <label>
                 Funding ID

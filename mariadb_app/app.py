@@ -814,6 +814,8 @@ def create_department(cursor, department_id: int, department_name: str):
         """
         INSERT INTO dbo.Departments (DepartmentId, DepartmentName)
         VALUES (?, ?)
+        ON DUPLICATE KEY UPDATE
+            DepartmentName = VALUES(DepartmentName)
         """,
         department_id,
         department_name,
@@ -2111,6 +2113,7 @@ def owner_employees():
                 if not new_department_id or not new_department_name:
                     flash("Funding ID and funding source are required.", "error")
                     return redirect(url_for("owner_employees"))
+                existing_department = departments_by_id.get(new_department_id)
                 try:
                     create_department(cursor, int(new_department_id), new_department_name)
                     conn.commit()
@@ -2123,7 +2126,10 @@ def owner_employees():
                     flash(str(exc).strip() or "Could not add funding source.", "error")
                     return redirect(url_for("owner_employees"))
 
-                flash("Funding source added.", "success")
+                if existing_department is not None:
+                    flash("Funding source overwritten for that Funding ID.", "success")
+                else:
+                    flash("Funding source added.", "success")
                 return redirect(url_for("owner_employees"))
             elif action == "create":
                 if viewer_role != "Owner":
