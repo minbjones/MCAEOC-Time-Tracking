@@ -195,6 +195,13 @@ def build_default_user_id(first_name: str, last_name: str, email: str = "") -> s
     return first or last
 
 
+def normalize_user_id_input(raw_user_id: str, first_name: str, last_name: str, email: str = "") -> str:
+    normalized = normalize_user_id_candidate(raw_user_id or "")
+    if normalized:
+        return normalized
+    return build_default_user_id(first_name, last_name, email)
+
+
 def validate_password_complexity(password: str) -> Optional[str]:
     if len(password) < 8:
         return "Password must be at least 8 characters."
@@ -598,6 +605,7 @@ def fetch_employee_by_id(cursor, employee_id: int):
             E.LastName,
             E.Email,
             E.UserId,
+            E.ReportsToUserId,
             E.RoleId,
             R.RoleName,
             E.IsActive
@@ -621,6 +629,55 @@ def fetch_employee_user_id(cursor, employee_id: int) -> Optional[str]:
     )
     row = cursor.fetchone()
     return (row.UserId or "").strip() if row is not None and row.UserId else None
+
+
+def canonicalize_existing_employee_identifiers(cursor, employee_id: int):
+    employee = fetch_employee_by_id(cursor, employee_id)
+    if employee is None:
+        return None
+
+    current_user_id = (employee.UserId or "").strip()
+    normalized_user_id = normalize_user_id_candidate(current_user_id)
+    if normalized_user_id and normalized_user_id != current_user_id:
+        reassign_employee_reports(cursor, current_user_id, normalized_user_id)
+        cursor.execute(
+            """
+            UPDATE dbo.Employees
+            SET UserId = ?
+            WHERE EmployeeId = ?
+            """,
+            normalized_user_id,
+            employee_id,
+        )
+        employee = fetch_employee_by_id(cursor, employee_id)
+
+    reports_to_user_id = (getattr(employee, "ReportsToUserId", None) or "").strip() if employee is not None else ""
+    if reports_to_user_id:
+        normalized_reports_to = normalize_user_id_candidate(reports_to_user_id)
+        if normalized_reports_to and normalized_reports_to != reports_to_user_id:
+            cursor.execute(
+                """
+                SELECT EmployeeId, UserId
+                FROM dbo.Employees
+                WHERE LOWER(UserId) = ?
+                LIMIT 1
+                """,
+                normalized_reports_to,
+            )
+            resolved_supervisor = cursor.fetchone()
+            if resolved_supervisor is not None:
+                cursor.execute(
+                    """
+                    UPDATE dbo.Employees
+                    SET ReportsToUserId = ?
+                    WHERE EmployeeId = ?
+                    """,
+                    resolved_supervisor.UserId,
+                    employee_id,
+                )
+                employee = fetch_employee_by_id(cursor, employee_id)
+
+    return employee
 
 
 def make_employee_inactive(cursor, employee_id: int) -> bool:
@@ -2203,7 +2260,7 @@ def owner_employees():
                 except ValueError as exc:
                     flash(str(exc), "error")
                     return redirect(url_for("owner_employees"))
-                user_id = user_id or build_default_user_id(first_name, last_name, email)
+                user_id = normalize_user_id_input(user_id, first_name, last_name, email)
                 department_id = int(department_id_value)
                 existing_employee = find_employee_duplicate(cursor, email, user_id)
 
@@ -2317,10 +2374,9 @@ def owner_employees():
                         if not email:
                             raise ValueError("Email is required.")
                         email = email.lower()
-                        user_id = row["user_id"] or build_default_user_id(first_name, last_name, email)
+                        user_id = normalize_user_id_input(row["user_id"], first_name, last_name, email)
                         if not user_id:
                             raise ValueError("User ID could not be generated. Provide a user_id in the CSV.")
-                        user_id = user_id.lower()
                         department_id = resolve_department_id(row, departments_by_id, departments_by_name)
                         normalized_hire_date = normalize_import_hire_date(row["hire_date"])
 
@@ -2654,10 +2710,10 @@ def owner_employees():
                 except ValueError as exc:
                     flash(str(exc), "error")
                     return redirect(url_for("owner_employees", employee_id=employee_id))
-                user_id = user_id or build_default_user_id(first_name, last_name, email)
+                user_id = normalize_user_id_input(user_id, first_name, last_name, email)
                 department_id = int(department_id_value)
                 is_active = "Yes" if request.form.get("is_active") == "1" else "No"
-                current_employee = fetch_employee_by_id(cursor, employee_id)
+                current_employee = canonicalize_existing_employee_identifiers(cursor, employee_id)
                 if current_employee is None:
                     flash("Employee not found.", "error")
                     return redirect(url_for("owner_employees"))
