@@ -1,6 +1,6 @@
-# Synology MariaDB Mobile API
+# MariaDB Mobile API
 
-This is the Android-facing mobile API for the Synology/MariaDB test stack.
+This is the Android-facing mobile API for the MariaDB test stack.
 
 ## Features
 
@@ -24,7 +24,7 @@ Embeddings are stored in MariaDB in `dbo.FaceTemplates`.
 
 ## Recommended small-business defaults
 
-This Synology variant is tuned by default for a small-business time clock workflow:
+This MariaDB variant is tuned by default for a small-business time clock workflow:
 
 - model: `ArcFace`
 - detector: `ssd`
@@ -48,6 +48,6 @@ You can override them with:
 
 ## Notes
 
-- This is intended for Synology testing, not a finished production biometric system.
+- This is intended for MariaDB testing, not a finished production biometric system.
 - Liveness detection is not implemented.
 - You should still tune `FACE_DISTANCE_THRESHOLD` for your environment before relying on payroll decisions.

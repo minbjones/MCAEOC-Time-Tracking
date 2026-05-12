@@ -4,17 +4,18 @@ services:
     container_name: mcaeoc_mariadb
     restart: unless-stopped
     environment:
-      MARIADB_ROOT_PASSWORD: rootpass-change-me
+      MARIADB_ROOT_PASSWORD: change-me-root-password
       MARIADB_DATABASE: dbo
       MARIADB_USER: mcaeoc
       MARIADB_PASSWORD: mcaeocpass-change-me
-    ports:
-      - "3306:3306"
     volumes:
       - mariadb_data:/var/lib/mysql
+      - ./schema_mariadb.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    ports:
+      - "3306:3306"
 
   web:
-    image: ghcr.io/your-github-user-or-org/mcaeoc-time-tracking-synology-web:latest
+    build: .
     container_name: mcaeoc_web_mariadb
     restart: unless-stopped
     depends_on:
@@ -36,14 +37,16 @@ services:
       - "8000:8000"
 
   mobile_api:
-    image: ghcr.io/your-github-user-or-org/mcaeoc-time-tracking-synology-mobile-api:latest
+    build:
+      context: .
+      dockerfile: mobile_api/Dockerfile
     container_name: mcaeoc_mobile_api_mariadb
     restart: unless-stopped
     depends_on:
       - mariadb
     environment:
       EMPLOYEE_TIME_TRACKING_CONNECTION_STRING: SERVER=mariadb;DATABASE=dbo;UID=mcaeoc;PWD=mcaeocpass-change-me;PORT=3306;
-      EMPLOYEE_TIME_TRACKING_MOBILE_API_KEY: change-me
+      EMPLOYEE_TIME_TRACKING_MOBILE_API_KEY: change-me-api-key
       FACE_MODEL_NAME: ArcFace
       FACE_DETECTOR_BACKEND: ssd
       FACE_DISTANCE_THRESHOLD: 0.30

@@ -1,12 +1,12 @@
-name: Build Synology Images
+name: Build MariaDB Images
 
 on:
   push:
     branches:
       - master
     paths:
-      - "synology_mariadb/**"
-      - ".github/workflows/synology-ghcr-images.yml"
+      - "mariadb_app/**"
+      - ".github/workflows/mariadb-ghcr-images.yml"
   workflow_dispatch:
 
 permissions:
@@ -15,8 +15,8 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  WEB_IMAGE_NAME: mcaeoc-time-tracking-synology-web
-  MOBILE_API_IMAGE_NAME: mcaeoc-time-tracking-synology-mobile-api
+  WEB_IMAGE_NAME: mcaeoc-time-tracking-mariadb-web
+  MOBILE_API_IMAGE_NAME: mcaeoc-time-tracking-mariadb-mobile-api
 
 jobs:
   build-and-push:
@@ -45,8 +45,8 @@ jobs:
       - name: Build And Push Web Image
         uses: docker/build-push-action@v6
         with:
-          context: ./synology_mariadb
-          file: ./synology_mariadb/Dockerfile
+          context: ./mariadb_app
+          file: ./mariadb_app/Dockerfile
           push: true
           tags: ${{ steps.meta_web.outputs.tags }}
           labels: ${{ steps.meta_web.outputs.labels }}
@@ -63,8 +63,8 @@ jobs:
       - name: Build And Push Mobile API Image
         uses: docker/build-push-action@v6
         with:
-          context: ./synology_mariadb
-          file: ./synology_mariadb/mobile_api/Dockerfile
+          context: ./mariadb_app
+          file: ./mariadb_app/mobile_api/Dockerfile
           push: true
           tags: ${{ steps.meta_mobile.outputs.tags }}
           labels: ${{ steps.meta_mobile.outputs.labels }}

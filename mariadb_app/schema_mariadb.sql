@@ -54,6 +54,11 @@ CREATE TABLE IF NOT EXISTS `TimeEntries` (
     `ClockOutTime` DATETIME(6) NULL,
     `Notes` VARCHAR(500) NULL,
     `EntrySource` VARCHAR(20) NOT NULL DEFAULT 'Clock',
+    `ClockMethod` VARCHAR(30) NOT NULL DEFAULT 'WebManual',
+    `SourceDeviceId` INT NULL,
+    `VerificationAttemptId` INT NULL,
+    `Latitude` DECIMAL(9,6) NULL,
+    `Longitude` DECIMAL(9,6) NULL,
     `CreatedByEmployeeId` INT NULL,
     `LastModifiedAt` DATETIME(6) NULL,
     `LastModifiedByEmployeeId` INT NULL,
@@ -120,6 +125,97 @@ CREATE TABLE IF NOT EXISTS `LeaveLedger` (
     KEY `IX_LeaveLedger_EmployeeId` (`EmployeeId`),
     CONSTRAINT `FK_LeaveLedger_Employees` FOREIGN KEY (`EmployeeId`) REFERENCES `Employees` (`EmployeeId`)
 ) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS `MobileDevices` (
+    `MobileDeviceId` INT NOT NULL AUTO_INCREMENT,
+    `EmployeeId` INT NOT NULL,
+    `DeviceIdentifier` VARCHAR(200) NOT NULL,
+    `DeviceName` VARCHAR(200) NULL,
+    `Platform` VARCHAR(30) NOT NULL DEFAULT 'Android',
+    `IsTrusted` TINYINT(1) NOT NULL DEFAULT 1,
+    `RegisteredAt` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    `LastSeenAt` DATETIME(6) NULL,
+    `IsActive` TINYINT(1) NOT NULL DEFAULT 1,
+    PRIMARY KEY (`MobileDeviceId`),
+    UNIQUE KEY `UX_MobileDevices_DeviceIdentifier` (`DeviceIdentifier`),
+    KEY `IX_MobileDevices_EmployeeId` (`EmployeeId`),
+    CONSTRAINT `FK_MobileDevices_Employees` FOREIGN KEY (`EmployeeId`) REFERENCES `Employees` (`EmployeeId`)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS `FaceTemplates` (
+    `FaceTemplateId` INT NOT NULL AUTO_INCREMENT,
+    `EmployeeId` INT NOT NULL,
+    `ProviderName` VARCHAR(50) NOT NULL DEFAULT 'DeepFace',
+    `ProviderPersonGroupId` VARCHAR(64) NULL,
+    `ProviderPersonId` VARCHAR(64) NULL,
+    `ProviderPersistedFaceId` VARCHAR(64) NULL,
+    `ModelName` VARCHAR(50) NOT NULL,
+    `DetectorBackend` VARCHAR(50) NOT NULL,
+    `TemplateVersion` VARCHAR(50) NOT NULL,
+    `TemplateData` LONGBLOB NULL,
+    `EmbeddingJson` LONGTEXT NOT NULL,
+    `EmbeddingDimensions` INT NOT NULL,
+    `EncryptionKeyLabel` VARCHAR(100) NULL,
+    `EnrolledAt` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    `EnrolledByEmployeeId` INT NULL,
+    `IsActive` TINYINT(1) NOT NULL DEFAULT 1,
+    `Notes` VARCHAR(500) NULL,
+    PRIMARY KEY (`FaceTemplateId`),
+    KEY `IX_FaceTemplates_EmployeeId` (`EmployeeId`),
+    KEY `IX_FaceTemplates_EnrolledByEmployeeId` (`EnrolledByEmployeeId`),
+    CONSTRAINT `FK_FaceTemplates_Employees` FOREIGN KEY (`EmployeeId`) REFERENCES `Employees` (`EmployeeId`),
+    CONSTRAINT `FK_FaceTemplates_EnrolledBy` FOREIGN KEY (`EnrolledByEmployeeId`) REFERENCES `Employees` (`EmployeeId`)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS `FaceVerificationAttempts` (
+    `FaceVerificationAttemptId` INT NOT NULL AUTO_INCREMENT,
+    `EmployeeId` INT NULL,
+    `MobileDeviceId` INT NULL,
+    `DeviceIdentifier` VARCHAR(200) NOT NULL,
+    `VerificationPurpose` VARCHAR(30) NOT NULL,
+    `VerificationStatus` VARCHAR(20) NOT NULL,
+    `ConfidenceScore` DECIMAL(8,4) NULL,
+    `LivenessScore` DECIMAL(8,4) NULL,
+    `DistanceScore` DECIMAL(8,6) NULL,
+    `FailureReason` VARCHAR(500) NULL,
+    `CapturedAt` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    `ProviderReference` VARCHAR(120) NULL,
+    PRIMARY KEY (`FaceVerificationAttemptId`),
+    KEY `IX_FaceVerificationAttempts_EmployeeId` (`EmployeeId`),
+    KEY `IX_FaceVerificationAttempts_MobileDeviceId` (`MobileDeviceId`),
+    CONSTRAINT `FK_FaceVerificationAttempts_Employees` FOREIGN KEY (`EmployeeId`) REFERENCES `Employees` (`EmployeeId`),
+    CONSTRAINT `FK_FaceVerificationAttempts_MobileDevices` FOREIGN KEY (`MobileDeviceId`) REFERENCES `MobileDevices` (`MobileDeviceId`)
+) ENGINE=InnoDB;
+
+SET @sql = IF (
+    EXISTS (
+        SELECT 1
+        FROM information_schema.TABLE_CONSTRAINTS
+        WHERE CONSTRAINT_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'TimeEntries'
+          AND CONSTRAINT_NAME = 'FK_TimeEntries_MobileDevices'
+    ),
+    'SELECT 1',
+    'ALTER TABLE `TimeEntries` ADD CONSTRAINT `FK_TimeEntries_MobileDevices` FOREIGN KEY (`SourceDeviceId`) REFERENCES `MobileDevices` (`MobileDeviceId`)'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql = IF (
+    EXISTS (
+        SELECT 1
+        FROM information_schema.TABLE_CONSTRAINTS
+        WHERE CONSTRAINT_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'TimeEntries'
+          AND CONSTRAINT_NAME = 'FK_TimeEntries_FaceVerificationAttempts'
+    ),
+    'SELECT 1',
+    'ALTER TABLE `TimeEntries` ADD CONSTRAINT `FK_TimeEntries_FaceVerificationAttempts` FOREIGN KEY (`VerificationAttemptId`) REFERENCES `FaceVerificationAttempts` (`FaceVerificationAttemptId`)'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 DELIMITER $$
 
@@ -285,6 +381,248 @@ BEGIN
     END IF;
 END$$
 
+CREATE PROCEDURE `usp_RegisterMobileDevice`(
+    IN p_EmployeeId INT,
+    IN p_DeviceIdentifier VARCHAR(200),
+    IN p_DeviceName VARCHAR(200),
+    IN p_Platform VARCHAR(30)
+)
+BEGIN
+    DECLARE v_MobileDeviceId INT;
+
+    SELECT `MobileDeviceId`
+      INTO v_MobileDeviceId
+    FROM `MobileDevices`
+    WHERE `DeviceIdentifier` = p_DeviceIdentifier
+    LIMIT 1;
+
+    IF v_MobileDeviceId IS NULL THEN
+        INSERT INTO `MobileDevices`
+        (
+            `EmployeeId`,
+            `DeviceIdentifier`,
+            `DeviceName`,
+            `Platform`,
+            `LastSeenAt`,
+            `IsTrusted`,
+            `IsActive`
+        )
+        VALUES
+        (
+            p_EmployeeId,
+            p_DeviceIdentifier,
+            p_DeviceName,
+            COALESCE(p_Platform, 'Android'),
+            UTC_TIMESTAMP(6),
+            1,
+            1
+        );
+
+        SET v_MobileDeviceId = LAST_INSERT_ID();
+    ELSE
+        UPDATE `MobileDevices`
+        SET `EmployeeId` = p_EmployeeId,
+            `DeviceName` = p_DeviceName,
+            `Platform` = COALESCE(p_Platform, `Platform`),
+            `LastSeenAt` = UTC_TIMESTAMP(6),
+            `IsTrusted` = 1,
+            `IsActive` = 1
+        WHERE `MobileDeviceId` = v_MobileDeviceId;
+    END IF;
+
+    SELECT *
+    FROM `MobileDevices`
+    WHERE `MobileDeviceId` = v_MobileDeviceId;
+END$$
+
+CREATE PROCEDURE `usp_SaveFaceTemplate`(
+    IN p_EmployeeId INT,
+    IN p_TemplateVersion VARCHAR(50),
+    IN p_TemplateData LONGBLOB,
+    IN p_EmbeddingJson LONGTEXT,
+    IN p_EmbeddingDimensions INT,
+    IN p_ModelName VARCHAR(50),
+    IN p_DetectorBackend VARCHAR(50),
+    IN p_EnrolledByEmployeeId INT,
+    IN p_Notes VARCHAR(500)
+)
+BEGIN
+    UPDATE `FaceTemplates`
+    SET `IsActive` = 0
+    WHERE `EmployeeId` = p_EmployeeId
+      AND `IsActive` = 1;
+
+    INSERT INTO `FaceTemplates`
+    (
+        `EmployeeId`,
+        `ProviderName`,
+        `ModelName`,
+        `DetectorBackend`,
+        `TemplateVersion`,
+        `TemplateData`,
+        `EmbeddingJson`,
+        `EmbeddingDimensions`,
+        `EnrolledByEmployeeId`,
+        `Notes`
+    )
+    VALUES
+    (
+        p_EmployeeId,
+        'DeepFace',
+        p_ModelName,
+        p_DetectorBackend,
+        p_TemplateVersion,
+        p_TemplateData,
+        p_EmbeddingJson,
+        p_EmbeddingDimensions,
+        p_EnrolledByEmployeeId,
+        p_Notes
+    );
+
+    SELECT LAST_INSERT_ID() AS `FaceTemplateId`;
+END$$
+
+CREATE PROCEDURE `usp_RecordFaceVerificationAttempt`(
+    IN p_EmployeeId INT,
+    IN p_DeviceIdentifier VARCHAR(200),
+    IN p_VerificationPurpose VARCHAR(30),
+    IN p_VerificationStatus VARCHAR(20),
+    IN p_ConfidenceScore DECIMAL(8,4),
+    IN p_LivenessScore DECIMAL(8,4),
+    IN p_DistanceScore DECIMAL(8,6),
+    IN p_FailureReason VARCHAR(500),
+    IN p_ProviderReference VARCHAR(120)
+)
+BEGIN
+    DECLARE v_MobileDeviceId INT;
+
+    SELECT `MobileDeviceId`
+      INTO v_MobileDeviceId
+    FROM `MobileDevices`
+    WHERE `DeviceIdentifier` = p_DeviceIdentifier
+    LIMIT 1;
+
+    INSERT INTO `FaceVerificationAttempts`
+    (
+        `EmployeeId`,
+        `MobileDeviceId`,
+        `DeviceIdentifier`,
+        `VerificationPurpose`,
+        `VerificationStatus`,
+        `ConfidenceScore`,
+        `LivenessScore`,
+        `DistanceScore`,
+        `FailureReason`,
+        `ProviderReference`
+    )
+    VALUES
+    (
+        p_EmployeeId,
+        v_MobileDeviceId,
+        p_DeviceIdentifier,
+        p_VerificationPurpose,
+        p_VerificationStatus,
+        p_ConfidenceScore,
+        p_LivenessScore,
+        p_DistanceScore,
+        p_FailureReason,
+        p_ProviderReference
+    );
+
+    SELECT LAST_INSERT_ID() AS `FaceVerificationAttemptId`;
+END$$
+
+CREATE PROCEDURE `usp_MobileClockEvent`(
+    IN p_EmployeeId INT,
+    IN p_EventType VARCHAR(20),
+    IN p_DeviceIdentifier VARCHAR(200),
+    IN p_VerificationAttemptId INT,
+    IN p_Latitude DECIMAL(9,6),
+    IN p_Longitude DECIMAL(9,6)
+)
+BEGIN
+    DECLARE v_MobileDeviceId INT;
+    DECLARE v_OpenTimeEntryId INT;
+    DECLARE v_LocationNote VARCHAR(500);
+
+    SELECT `MobileDeviceId`
+      INTO v_MobileDeviceId
+    FROM `MobileDevices`
+    WHERE `DeviceIdentifier` = p_DeviceIdentifier
+      AND `IsActive` = 1
+    LIMIT 1;
+
+    IF v_MobileDeviceId IS NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Device is not registered.';
+    END IF;
+
+    IF p_Latitude IS NOT NULL AND p_Longitude IS NOT NULL THEN
+        SET v_LocationNote = CONCAT('Lat ', p_Latitude, ', Lon ', p_Longitude);
+    ELSE
+        SET v_LocationNote = NULL;
+    END IF;
+
+    IF p_EventType = 'ClockIn' THEN
+        IF EXISTS (
+            SELECT 1
+            FROM `TimeEntries`
+            WHERE `EmployeeId` = p_EmployeeId
+              AND `ClockOutTime` IS NULL
+        ) THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Employee is already clocked in.';
+        END IF;
+
+        INSERT INTO `TimeEntries`
+        (
+            `EmployeeId`,
+            `ClockInTime`,
+            `Notes`,
+            `EntrySource`,
+            `ClockMethod`,
+            `SourceDeviceId`,
+            `VerificationAttemptId`,
+            `Latitude`,
+            `Longitude`
+        )
+        VALUES
+        (
+            p_EmployeeId,
+            UTC_TIMESTAMP(6),
+            COALESCE(v_LocationNote, CONCAT('Mobile clock-in from ', p_DeviceIdentifier)),
+            'Mobile',
+            'AndroidFace',
+            v_MobileDeviceId,
+            p_VerificationAttemptId,
+            p_Latitude,
+            p_Longitude
+        );
+    ELSEIF p_EventType = 'ClockOut' THEN
+        SELECT `TimeEntryId`
+          INTO v_OpenTimeEntryId
+        FROM `TimeEntries`
+        WHERE `EmployeeId` = p_EmployeeId
+          AND `ClockOutTime` IS NULL
+        ORDER BY `ClockInTime` DESC, `TimeEntryId` DESC
+        LIMIT 1;
+
+        IF v_OpenTimeEntryId IS NULL THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Employee is not currently clocked in.';
+        END IF;
+
+        UPDATE `TimeEntries`
+        SET `ClockOutTime` = UTC_TIMESTAMP(6),
+            `Notes` = COALESCE(`Notes`, COALESCE(v_LocationNote, CONCAT('Mobile clock-out from ', p_DeviceIdentifier))),
+            `ClockMethod` = 'AndroidFace',
+            `SourceDeviceId` = v_MobileDeviceId,
+            `VerificationAttemptId` = p_VerificationAttemptId,
+            `Latitude` = COALESCE(p_Latitude, `Latitude`),
+            `Longitude` = COALESCE(p_Longitude, `Longitude`)
+        WHERE `TimeEntryId` = v_OpenTimeEntryId;
+    ELSE
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Unsupported mobile clock event.';
+    END IF;
+END$$
+
 CREATE PROCEDURE `usp_GetBiWeeklyTimesheet`(
     IN p_EmployeeId INT,
     IN p_PeriodStartDate DATE
@@ -403,6 +741,23 @@ SELECT
 FROM `Employees` E
 LEFT JOIN `LeaveLedger` L ON L.`EmployeeId` = E.`EmployeeId`
 GROUP BY E.`EmployeeId`;
+
+CREATE OR REPLACE VIEW `vw_EmployeeFaceStatus` AS
+SELECT
+    E.`EmployeeId`,
+    E.`PayrollId`,
+    LTRIM(RTRIM(CONCAT(E.`FirstName`, ' ', E.`LastName`))) AS `FullName`,
+    CASE
+        WHEN EXISTS
+        (
+            SELECT 1
+            FROM `FaceTemplates` FT
+            WHERE FT.`EmployeeId` = E.`EmployeeId`
+              AND FT.`IsActive` = 1
+        ) THEN 1
+        ELSE 0
+    END AS `HasActiveFaceTemplate`
+FROM `Employees` E;
 
 INSERT IGNORE INTO `Roles` (`RoleName`)
 VALUES ('Owner'), ('Executive Director'), ('Director'), ('Manager'), ('User'), ('Leave Manager');

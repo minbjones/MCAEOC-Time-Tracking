@@ -8,14 +8,13 @@ services:
       MARIADB_DATABASE: dbo
       MARIADB_USER: mcaeoc
       MARIADB_PASSWORD: mcaeocpass-change-me
-    volumes:
-      - mariadb_data:/var/lib/mysql
-      - ./schema_mariadb.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
     ports:
       - "3306:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
 
   web:
-    build: .
+    image: ghcr.io/your-github-user-or-org/mcaeoc-time-tracking-mariadb-web:latest
     container_name: mcaeoc_web_mariadb
     restart: unless-stopped
     depends_on:
@@ -37,9 +36,7 @@ services:
       - "8000:8000"
 
   mobile_api:
-    build:
-      context: .
-      dockerfile: mobile_api/Dockerfile
+    image: ghcr.io/your-github-user-or-org/mcaeoc-time-tracking-mariadb-mobile-api:latest
     container_name: mcaeoc_mobile_api_mariadb
     restart: unless-stopped
     depends_on:
