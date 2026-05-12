@@ -572,6 +572,214 @@ def find_employee_duplicate(cursor, email: str, user_id: str, exclude_employee_i
     return cursor.fetchone()
 
 
+def fetch_employee_by_id(cursor, employee_id: int):
+    cursor.execute(
+        """
+        SELECT
+            E.EmployeeId,
+            E.PayrollId,
+            E.FirstName,
+            E.LastName,
+            E.Email,
+            E.UserId,
+            E.RoleId,
+            R.RoleName,
+            E.IsActive
+        FROM dbo.Employees E
+        INNER JOIN dbo.Roles R ON R.RoleId = E.RoleId
+        WHERE E.EmployeeId = ?
+        """,
+        employee_id,
+    )
+    return cursor.fetchone()
+
+
+def make_employee_inactive(cursor, employee_id: int) -> bool:
+    cursor.execute(
+        """
+        UPDATE dbo.Employees
+        SET IsActive = 'No'
+        WHERE EmployeeId = ?
+          AND IsActive <> 'No'
+        """,
+        employee_id,
+    )
+    return cursor.rowcount > 0
+
+
+def delete_employee_records(conn, cursor, employee_id: int):
+    ensure_password_setup_schema(conn)
+    employee = fetch_employee_by_id(cursor, employee_id)
+    if employee is None:
+        raise ValueError("Employee not found.")
+
+    employee_user_id = (employee.UserId or "").strip()
+
+    cursor.execute(
+        """
+        UPDATE dbo.Employees
+        SET ReportsToUserId = NULL
+        WHERE ReportsToUserId = ?
+        """,
+        employee_user_id,
+    )
+    cursor.execute(
+        """
+        UPDATE dbo.LeaveRequests
+        SET ApprovedByEmployeeId = NULL
+        WHERE ApprovedByEmployeeId = ?
+        """,
+        employee_id,
+    )
+    cursor.execute(
+        """
+        UPDATE dbo.FaceTemplates
+        SET EnrolledByEmployeeId = NULL
+        WHERE EnrolledByEmployeeId = ?
+        """,
+        employee_id,
+    )
+    cursor.execute(
+        """
+        UPDATE dbo.TimeEntries
+        SET CreatedByEmployeeId = NULL
+        WHERE CreatedByEmployeeId = ?
+        """,
+        employee_id,
+    )
+    cursor.execute(
+        """
+        UPDATE dbo.TimeEntries
+        SET LastModifiedByEmployeeId = NULL
+        WHERE LastModifiedByEmployeeId = ?
+        """,
+        employee_id,
+    )
+    cursor.execute(
+        """
+        UPDATE dbo.TimeEntryAudit
+        SET ChangedByEmployeeId = 1
+        WHERE ChangedByEmployeeId = ?
+        """,
+        employee_id,
+    )
+
+    cursor.execute(
+        """
+        UPDATE dbo.TimeEntries
+        SET VerificationAttemptId = NULL
+        WHERE VerificationAttemptId IN
+        (
+            SELECT FaceVerificationAttemptId
+            FROM dbo.FaceVerificationAttempts
+            WHERE EmployeeId = ?
+               OR MobileDeviceId IN
+                  (
+                      SELECT MobileDeviceId
+                      FROM dbo.MobileDevices
+                      WHERE EmployeeId = ?
+                  )
+        )
+        """,
+        employee_id,
+        employee_id,
+    )
+    cursor.execute(
+        """
+        UPDATE dbo.TimeEntries
+        SET SourceDeviceId = NULL
+        WHERE SourceDeviceId IN
+        (
+            SELECT MobileDeviceId
+            FROM dbo.MobileDevices
+            WHERE EmployeeId = ?
+        )
+        """,
+        employee_id,
+    )
+    cursor.execute(
+        """
+        DELETE FROM dbo.PasswordSetupTokens
+        WHERE EmployeeId = ?
+        """,
+        employee_id,
+    )
+    cursor.execute(
+        """
+        DELETE FROM dbo.TimeEntryAudit
+        WHERE EmployeeId = ?
+           OR TimeEntryId IN
+              (
+                  SELECT TimeEntryId
+                  FROM dbo.TimeEntries
+                  WHERE EmployeeId = ?
+              )
+        """,
+        employee_id,
+        employee_id,
+    )
+    cursor.execute(
+        """
+        DELETE FROM dbo.LeaveLedger
+        WHERE EmployeeId = ?
+        """,
+        employee_id,
+    )
+    cursor.execute(
+        """
+        DELETE FROM dbo.LeaveRequests
+        WHERE EmployeeId = ?
+        """,
+        employee_id,
+    )
+    cursor.execute(
+        """
+        DELETE FROM dbo.FaceVerificationAttempts
+        WHERE EmployeeId = ?
+           OR MobileDeviceId IN
+              (
+                  SELECT MobileDeviceId
+                  FROM dbo.MobileDevices
+                  WHERE EmployeeId = ?
+              )
+        """,
+        employee_id,
+        employee_id,
+    )
+    cursor.execute(
+        """
+        DELETE FROM dbo.FaceTemplates
+        WHERE EmployeeId = ?
+        """,
+        employee_id,
+    )
+    cursor.execute(
+        """
+        DELETE FROM dbo.MobileDevices
+        WHERE EmployeeId = ?
+        """,
+        employee_id,
+    )
+    cursor.execute(
+        """
+        DELETE FROM dbo.TimeEntries
+        WHERE EmployeeId = ?
+        """,
+        employee_id,
+    )
+    cursor.execute(
+        """
+        DELETE FROM dbo.Employees
+        WHERE EmployeeId = ?
+        """,
+        employee_id,
+    )
+    if cursor.rowcount <= 0:
+        raise ValueError("Employee could not be deleted.")
+
+    return employee
+
+
 def fetch_departments():
     with get_connection() as conn:
         cursor = conn.cursor()
@@ -2246,6 +2454,71 @@ def owner_employees():
                 ]
                 flash("Password reset. A one-time password setup link was generated for the employee.", "success")
                 return redirect(url_for("owner_employees", employee_id=employee_id))
+            elif action == "make_inactive":
+                if viewer_role != "Owner":
+                    flash("Only the Owner can make employees inactive.", "error")
+                    return redirect(url_for("owner_employees"))
+
+                employee_id = int(request.form["employee_id"])
+                employee = fetch_employee_by_id(cursor, employee_id)
+                if employee is None:
+                    flash("Employee not found.", "error")
+                    return redirect(url_for("owner_employees"))
+                if employee.EmployeeId == viewer_id:
+                    flash("You cannot make your own account inactive while signed in.", "error")
+                    return redirect(url_for("owner_employees", employee_id=employee_id))
+                if is_seeded_owner_account(employee):
+                    flash("The seeded owner account must stay active.", "error")
+                    return redirect(url_for("owner_employees", employee_id=employee_id))
+
+                try:
+                    changed = make_employee_inactive(cursor, employee_id)
+                    conn.commit()
+                except pyodbc.Error as exc:
+                    conn.rollback()
+                    flash(str(exc).strip() or "Could not update employee status.", "error")
+                    return redirect(url_for("owner_employees", employee_id=employee_id))
+
+                if changed:
+                    flash("Employee marked inactive. Their history was preserved.", "success")
+                else:
+                    flash("Employee was already inactive.", "info")
+                return redirect(url_for("owner_employees", employee_id=employee_id))
+            elif action == "delete_employee":
+                if viewer_role != "Owner":
+                    flash("Only the Owner can delete employees.", "error")
+                    return redirect(url_for("owner_employees"))
+
+                employee_id = int(request.form["employee_id"])
+                employee = fetch_employee_by_id(cursor, employee_id)
+                if employee is None:
+                    flash("Employee not found.", "error")
+                    return redirect(url_for("owner_employees"))
+                if employee.EmployeeId == viewer_id:
+                    flash("You cannot delete the account you are currently using.", "error")
+                    return redirect(url_for("owner_employees", employee_id=employee_id))
+                if is_seeded_owner_account(employee):
+                    flash("The seeded owner account cannot be deleted.", "error")
+                    return redirect(url_for("owner_employees", employee_id=employee_id))
+
+                try:
+                    deleted_employee = delete_employee_records(conn, cursor, employee_id)
+                    conn.commit()
+                except (ValueError, pyodbc.Error) as exc:
+                    conn.rollback()
+                    flash(
+                        str(exc).strip()
+                        or "Could not delete employee. Make the employee inactive instead if you need to preserve history.",
+                        "error",
+                    )
+                    return redirect(url_for("owner_employees", employee_id=employee_id))
+
+                flash(
+                    f"Deleted employee {deleted_employee.FirstName} {deleted_employee.LastName}. "
+                    "If you only wanted to block access, use Make Inactive next time so the record stays in the system.",
+                    "success",
+                )
+                return redirect(url_for("owner_employees"))
             else:
                 employee_id = int(request.form["employee_id"])
                 if viewer_role == "Executive Director" and not can_access_employee(employee_id, viewer_id, viewer_role):
