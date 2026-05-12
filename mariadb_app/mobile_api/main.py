@@ -29,6 +29,20 @@ def require_api_key(x_api_key: str = Header(...)):
         raise HTTPException(status_code=401, detail="Invalid API key.")
 
 
+def decode_face_image_or_400(encoded_image: str, field_label: str) -> bytes:
+    try:
+        return decode_b64(encoded_image)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"{field_label} is not valid base64 image data.") from exc
+
+
+def create_embedding_or_400(image_bytes: bytes, field_label: str) -> list[float]:
+    try:
+        return face_service.represent(image_bytes)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"{field_label}: {str(exc).strip()}") from exc
+
+
 def register_or_update_device(cursor, employee_id: int, device_identifier: str, device_name: str | None, platform: str):
     cursor.execute(
         """
@@ -303,8 +317,8 @@ def register_device(payload: DeviceRegistrationRequest):
 
 @app.post("/api/mobile/face/enroll", response_model=ApiResponse, dependencies=[Depends(require_api_key)])
 def enroll_face(payload: FaceEnrollmentRequest):
-    image_bytes = decode_b64(payload.face_template_b64)
-    embedding = face_service.represent(image_bytes)
+    image_bytes = decode_face_image_or_400(payload.face_template_b64, "Enrollment image")
+    embedding = create_embedding_or_400(image_bytes, "Enrollment image")
 
     with get_db() as conn:
         cursor = conn.cursor()
@@ -321,6 +335,13 @@ def enroll_face(payload: FaceEnrollmentRequest):
         if not employee:
             raise HTTPException(status_code=404, detail="Employee not found.")
 
+        register_or_update_device(
+            cursor,
+            payload.employee_id,
+            f"enroll-{payload.employee_id}",
+            "Android Enrollment",
+            "Android",
+        )
         cursor.execute(
             """
             UPDATE dbo.FaceTemplates
@@ -363,8 +384,8 @@ def enroll_face(payload: FaceEnrollmentRequest):
 
 @app.post("/api/mobile/clock/verify-and-clock", response_model=FaceClockResponse, dependencies=[Depends(require_api_key)])
 def verify_and_clock(payload: FaceClockRequest):
-    selfie_bytes = decode_b64(payload.selfie_image_b64)
-    probe_embedding = face_service.represent(selfie_bytes)
+    selfie_bytes = decode_face_image_or_400(payload.selfie_image_b64, "Verification image")
+    probe_embedding = create_embedding_or_400(selfie_bytes, "Verification image")
 
     with get_db() as conn:
         cursor = conn.cursor()
@@ -415,6 +436,13 @@ def verify_and_clock(payload: FaceClockRequest):
                 liveness_score=0.0,
             )
 
+        register_or_update_device(
+            cursor,
+            payload.employee_id,
+            payload.device_identifier,
+            "Android Kiosk",
+            "Android",
+        )
         apply_mobile_clock_event(cursor, payload.employee_id, payload.event_type, payload.device_identifier, payload.latitude, payload.longitude)
         conn.commit()
 
@@ -432,8 +460,8 @@ def verify_and_clock(payload: FaceClockRequest):
 
 @app.post("/api/mobile/clock/identify-and-clock", response_model=FaceClockResponse, dependencies=[Depends(require_api_key)])
 def identify_and_clock(payload: IdentifyClockRequest):
-    selfie_bytes = decode_b64(payload.selfie_image_b64)
-    probe_embedding = face_service.represent(selfie_bytes)
+    selfie_bytes = decode_face_image_or_400(payload.selfie_image_b64, "Identification image")
+    probe_embedding = create_embedding_or_400(selfie_bytes, "Identification image")
 
     best_match = None
 
@@ -508,6 +536,13 @@ def identify_and_clock(payload: IdentifyClockRequest):
         event_row = cursor.fetchone()
         event_type = event_row.NextEventType
 
+        register_or_update_device(
+            cursor,
+            best_match["employee_id"],
+            payload.device_identifier,
+            "Android Kiosk",
+            "Android",
+        )
         record_verification_attempt(
             cursor,
             best_match["employee_id"],
