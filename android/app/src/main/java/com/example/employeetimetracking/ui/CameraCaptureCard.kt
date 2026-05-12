@@ -28,6 +28,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
@@ -52,6 +54,9 @@ fun CameraCaptureCard(
     buttonColors: ButtonColors,
     previewHeight: androidx.compose.ui.unit.Dp = 280.dp,
     enabled: Boolean = true,
+    autoCaptureEnabled: Boolean = false,
+    autoCaptureIntervalMs: Long = 5_000L,
+    autoCaptureBlockedUntilMillis: Long = 0L,
     onImageCaptured: (ByteArray) -> Unit
 ) {
     val context = LocalContext.current
@@ -70,6 +75,7 @@ fun CameraCaptureCard(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         )
     }
+    var nextAutoCaptureAtMillis by remember { mutableStateOf(0L) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -80,6 +86,22 @@ fun CameraCaptureCard(
     LaunchedEffect(Unit) {
         if (!hasPermission) {
             permissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    LaunchedEffect(autoCaptureEnabled, enabled, hasPermission, controller, autoCaptureBlockedUntilMillis) {
+        if (!autoCaptureEnabled || !enabled || !hasPermission || controller == null) {
+            return@LaunchedEffect
+        }
+
+        while (isActive) {
+            val now = System.currentTimeMillis()
+            val nextAllowedCapture = maxOf(nextAutoCaptureAtMillis, autoCaptureBlockedUntilMillis)
+            if (now >= nextAllowedCapture) {
+                nextAutoCaptureAtMillis = now + autoCaptureIntervalMs
+                captureToBytes(context, controller, onImageCaptured)
+            }
+            delay(1_000L)
         }
     }
 
@@ -165,6 +187,7 @@ fun CameraCaptureCard(
                 Button(
                     onClick = {
                         controller?.let {
+                            nextAutoCaptureAtMillis = System.currentTimeMillis() + autoCaptureIntervalMs
                             captureToBytes(context, it, onImageCaptured)
                         }
                     },

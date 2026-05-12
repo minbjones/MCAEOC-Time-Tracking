@@ -176,10 +176,17 @@ private fun KioskCameraScreen(
                         if (!showEnrollmentDialog) {
                             CameraCaptureCard(
                                 title = "",
-                                captureButtonLabel = "Capture",
-                                helperText = "",
+                                captureButtonLabel = "Capture Now",
+                                helperText = if (sessionState.employees.any { it.has_face_template }) {
+                                    "Hands-free capture is active for enrolled employees."
+                                } else {
+                                    "Enroll at least one employee to enable hands-free capture."
+                                },
                                 buttonColors = buttonColors,
                                 previewHeight = 420.dp,
+                                enabled = !sessionState.isLoading,
+                                autoCaptureEnabled = sessionState.employees.any { it.has_face_template } && !showEnrollmentDialog,
+                                autoCaptureBlockedUntilMillis = sessionState.autoCaptureCooldownUntilMillis,
                                 onImageCaptured = onCaptureClockEvent
                             )
                         } else {

@@ -20,7 +20,8 @@ data class SessionState(
     val enrollmentEmployeeId: Int? = null,
     val enrollmentEmployeeName: String = "",
     val enrollmentHasFaceTemplate: Boolean = false,
-    val greetingMessage: String? = null
+    val greetingMessage: String? = null,
+    val autoCaptureCooldownUntilMillis: Long = 0L
 )
 
 class MainViewModel : ViewModel() {
@@ -115,6 +116,7 @@ class MainViewModel : ViewModel() {
                     )
                 )
             }.onSuccess { response ->
+                val cooldownUntil = System.currentTimeMillis() + if (response.success) 12_000L else 4_000L
                 _sessionState.value = _sessionState.value.copy(
                     statusMessage = response.message,
                     greetingMessage = if (response.success && response.full_name != null && response.event_type != null) {
@@ -122,7 +124,8 @@ class MainViewModel : ViewModel() {
                     } else {
                         null
                     },
-                    isLoading = false
+                    isLoading = false,
+                    autoCaptureCooldownUntilMillis = cooldownUntil
                 )
                 if (response.success) {
                     delay(3000)
@@ -131,7 +134,8 @@ class MainViewModel : ViewModel() {
             }.onFailure { error ->
                 _sessionState.value = _sessionState.value.copy(
                     isLoading = false,
-                    statusMessage = extractErrorMessage(error, "Face clocking failed.")
+                    statusMessage = extractErrorMessage(error, "Face clocking failed."),
+                    autoCaptureCooldownUntilMillis = System.currentTimeMillis() + 4_000L
                 )
             }
         }
