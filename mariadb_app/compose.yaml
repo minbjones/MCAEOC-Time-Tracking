@@ -4,10 +4,10 @@ services:
     container_name: mcaeoc_mariadb
     restart: unless-stopped
     environment:
-      MARIADB_ROOT_PASSWORD: change-me-root-password
+      MARIADB_ROOT_PASSWORD: 1400Monster1!
       MARIADB_DATABASE: dbo
       MARIADB_USER: mcaeoc
-      MARIADB_PASSWORD: mcaeocpass-change-me
+      MARIADB_PASSWORD: 1400Monster1!
     volumes:
       - mariadb_data:/var/lib/mysql
       - ./schema_mariadb.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
@@ -21,10 +21,10 @@ services:
     depends_on:
       - mariadb
     environment:
-      FLASK_SECRET_KEY: change-this-secret-key
+      FLASK_SECRET_KEY: i-was-in-the-stable-when-jesus-was-born
       GUNICORN_WORKERS: 2
       GUNICORN_TIMEOUT: 120
-      EMPLOYEE_TIME_TRACKING_CONNECTION_STRING: SERVER=mariadb;DATABASE=dbo;UID=mcaeoc;PWD=mcaeocpass-change-me;PORT=3306;
+      EMPLOYEE_TIME_TRACKING_CONNECTION_STRING: SERVER=mariadb;DATABASE=dbo;UID=mcaeoc;PWD=1400Monster1!;PORT=3306;
       SMTP_HOST:
       SMTP_PORT: 587
       SMTP_FROM_EMAIL:
@@ -46,7 +46,7 @@ services:
       - mariadb
     environment:
       EMPLOYEE_TIME_TRACKING_CONNECTION_STRING: SERVER=mariadb;DATABASE=dbo;UID=mcaeoc;PWD=mcaeocpass-change-me;PORT=3306;
-      EMPLOYEE_TIME_TRACKING_MOBILE_API_KEY: change-me-api-key
+      EMPLOYEE_TIME_TRACKING_MOBILE_API_KEY: i-was-in-the-stable-when-jesus-was-born
       FACE_MODEL_NAME: ArcFace
       FACE_DETECTOR_BACKEND: ssd
       FACE_DISTANCE_THRESHOLD: 0.30
