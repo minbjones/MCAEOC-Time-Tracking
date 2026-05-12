@@ -680,6 +680,42 @@ def canonicalize_existing_employee_identifiers(cursor, employee_id: int):
     return employee
 
 
+def repair_all_employee_identifiers(cursor) -> dict:
+    cursor.execute(
+        """
+        SELECT EmployeeId
+        FROM dbo.Employees
+        ORDER BY EmployeeId
+        """
+    )
+    employee_ids = [row.EmployeeId for row in cursor.fetchall()]
+    repaired_user_ids = 0
+    repaired_reports_to = 0
+
+    for employee_id in employee_ids:
+        before = fetch_employee_by_id(cursor, employee_id)
+        if before is None:
+            continue
+        before_user_id = (before.UserId or "").strip()
+        before_reports_to = (getattr(before, "ReportsToUserId", None) or "").strip()
+
+        after = canonicalize_existing_employee_identifiers(cursor, employee_id)
+        if after is None:
+            continue
+        after_user_id = (after.UserId or "").strip()
+        after_reports_to = (getattr(after, "ReportsToUserId", None) or "").strip()
+
+        if before_user_id != after_user_id:
+            repaired_user_ids += 1
+        if before_reports_to != after_reports_to:
+            repaired_reports_to += 1
+
+    return {
+        "repaired_user_ids": repaired_user_ids,
+        "repaired_reports_to": repaired_reports_to,
+    }
+
+
 def make_employee_inactive(cursor, employee_id: int) -> bool:
     cursor.execute(
         """
@@ -2235,6 +2271,30 @@ def owner_employees():
                     flash("Funding source overwritten for that Funding ID.", "success")
                 else:
                     flash("Funding source added.", "success")
+                return redirect(url_for("owner_employees"))
+            elif action == "repair_legacy_employees":
+                if viewer_role != "Owner":
+                    flash("Only the Owner can run employee repairs.", "error")
+                    return redirect(url_for("owner_employees"))
+
+                try:
+                    repair_summary = repair_all_employee_identifiers(cursor)
+                    conn.commit()
+                except pyodbc.Error as exc:
+                    conn.rollback()
+                    flash(str(exc).strip() or "Could not repair employee records.", "error")
+                    return redirect(url_for("owner_employees"))
+
+                repaired_user_ids = repair_summary["repaired_user_ids"]
+                repaired_reports_to = repair_summary["repaired_reports_to"]
+                if repaired_user_ids or repaired_reports_to:
+                    flash(
+                        "Employee repair completed. "
+                        f"Normalized {repaired_user_ids} user ID value(s) and repaired {repaired_reports_to} workflow link(s).",
+                        "success",
+                    )
+                else:
+                    flash("Employee repair completed. No legacy user IDs or workflow links needed changes.", "info")
                 return redirect(url_for("owner_employees"))
             elif action == "create":
                 if viewer_role != "Owner":

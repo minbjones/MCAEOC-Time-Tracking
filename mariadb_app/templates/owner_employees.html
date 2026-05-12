@@ -221,6 +221,15 @@
         </form>
     </article>
 
+    <article class="card wide-card">
+        <h2>Repair Legacy Employees</h2>
+        <p>Normalize older employee user IDs and repair workflow supervisor links that still point to legacy values. Run this after large imports or whenever older employee records behave differently from newly created ones.</p>
+        <form method="post" class="stack-form" data-track-changes="true" data-confirm-save-message="Run employee repair now? This will normalize legacy user IDs and update matching workflow links across the employee database.">
+            <input type="hidden" name="action" value="repair_legacy_employees">
+            <button type="submit">Repair Legacy Employees</button>
+        </form>
+    </article>
+
     {% if generated_setup_links %}
     <article class="card wide-card password-results-card">
         <h2>Generated Password Setup Links</h2>
