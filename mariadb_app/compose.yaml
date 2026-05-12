@@ -43,7 +43,7 @@ services:
     depends_on:
       - mariadb
     environment:
-      EMPLOYEE_TIME_TRACKING_CONNECTION_STRING: SERVER=mariadb;DATABASE=dbo;UID=mcaeoc;PWD=mcaeocpass-change-me;PORT=3306;
+      EMPLOYEE_TIME_TRACKING_CONNECTION_STRING: SERVER=mariadb;DATABASE=dbo;UID=mcaeoc;PWD=1400Monster1!;PORT=3306;
       EMPLOYEE_TIME_TRACKING_MOBILE_API_KEY: i-was-in-the-stable-when-jesus-was-born
       FACE_MODEL_NAME: ArcFace
       FACE_DETECTOR_BACKEND: ssd
