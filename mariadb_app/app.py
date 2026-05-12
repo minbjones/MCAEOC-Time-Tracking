@@ -623,6 +623,33 @@ def make_employee_inactive(cursor, employee_id: int) -> bool:
     return cursor.rowcount > 0
 
 
+def reassign_employee_reports(cursor, previous_user_id: str, next_user_id: Optional[str]):
+    normalized_previous = (previous_user_id or "").strip()
+    if not normalized_previous:
+        return
+
+    if next_user_id:
+        cursor.execute(
+            """
+            UPDATE dbo.Employees
+            SET ReportsToUserId = ?
+            WHERE ReportsToUserId = ?
+            """,
+            next_user_id.strip(),
+            normalized_previous,
+        )
+        return
+
+    cursor.execute(
+        """
+        UPDATE dbo.Employees
+        SET ReportsToUserId = NULL
+        WHERE ReportsToUserId = ?
+        """,
+        normalized_previous,
+    )
+
+
 def delete_employee_records(conn, cursor, employee_id: int):
     ensure_password_setup_schema(conn)
     employee = fetch_employee_by_id(cursor, employee_id)
@@ -631,14 +658,7 @@ def delete_employee_records(conn, cursor, employee_id: int):
 
     employee_user_id = (employee.UserId or "").strip()
 
-    cursor.execute(
-        """
-        UPDATE dbo.Employees
-        SET ReportsToUserId = NULL
-        WHERE ReportsToUserId = ?
-        """,
-        employee_user_id,
-    )
+    reassign_employee_reports(cursor, employee_user_id, None)
     cursor.execute(
         """
         UPDATE dbo.LeaveRequests
@@ -2591,6 +2611,10 @@ def owner_employees():
                 user_id = user_id or build_default_user_id(first_name, last_name, email)
                 department_id = int(department_id_value)
                 is_active = "Yes" if request.form.get("is_active") == "1" else "No"
+                current_employee = fetch_employee_by_id(cursor, employee_id)
+                if current_employee is None:
+                    flash("Employee not found.", "error")
+                    return redirect(url_for("owner_employees"))
                 existing_employee = find_employee_duplicate(cursor, email, user_id, exclude_employee_id=employee_id)
                 if existing_employee is not None:
                     flash(
@@ -2602,6 +2626,8 @@ def owner_employees():
                     )
                     return redirect(url_for("owner_employees", employee_id=employee_id))
                 try:
+                    if (current_employee.UserId or "").strip() != user_id:
+                        reassign_employee_reports(cursor, current_employee.UserId, user_id)
                     cursor.execute(
                         """
                         EXEC dbo.usp_UpdateEmployee
