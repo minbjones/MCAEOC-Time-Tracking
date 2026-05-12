@@ -268,19 +268,12 @@
 
         {% if session.get("role_name") == "Owner" %}
         <hr>
-        <p class="helper-text helper-text-left">Deleting an employee permanently removes linked records. If you only need to stop access, make the employee inactive instead.</p>
-        <div class="button-row">
-            <form method="post" data-track-changes="true" data-confirm-save-message="Make this employee inactive instead of deleting the employee?">
-                <input type="hidden" name="action" value="make_inactive">
-                <input type="hidden" name="employee_id" value="{{ selected_employee.EmployeeId }}">
-                <button type="submit">Make Inactive</button>
-            </form>
-            <form method="post" data-track-changes="true" data-confirm-save-message="Are you sure you want to delete employee or make employee inactive instead? Deleting permanently removes the employee and linked records.">
-                <input type="hidden" name="action" value="delete_employee">
-                <input type="hidden" name="employee_id" value="{{ selected_employee.EmployeeId }}">
-                <button type="submit">Delete Employee</button>
-            </form>
-        </div>
+        <p class="helper-text helper-text-left">Deleting an employee permanently removes linked records. Use the employee status field above if you only want to make the employee inactive.</p>
+        <form method="post" data-track-changes="true" data-confirm-save-message="Are you sure you want to delete {{ selected_employee.FirstName }} {{ selected_employee.LastName }} or make the employee inactive instead? Deleting permanently removes the employee and linked records.">
+            <input type="hidden" name="action" value="delete_employee">
+            <input type="hidden" name="employee_id" value="{{ selected_employee.EmployeeId }}">
+            <button type="submit">Delete Employee</button>
+        </form>
         <hr>
         <form method="post" class="grid-form" data-track-changes="true" data-confirm-save-message="Reset this employee password?">
             <input type="hidden" name="action" value="reset_password">
