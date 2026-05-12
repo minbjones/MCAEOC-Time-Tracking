@@ -22,7 +22,7 @@
 
     <article class="card wide-card">
         <h2>Create Employee</h2>
-        <p>Each employee stays linked to a funding source and can also be assigned to a supervisor through Workflow. User ID is auto-generated from first and last name, and the app generates a random 10-character temporary password that must be changed at first login.</p>
+        <p>Each employee stays linked to a funding source and can also be assigned to a supervisor through Workflow. User ID is auto-generated from first and last name, and the app generates a one-time password setup link for first login.</p>
         <form method="post" class="grid-form" data-track-changes="true" data-confirm-save-message="Create this employee record?">
             <label>
                 First name
@@ -83,8 +83,8 @@
 
     <article class="card wide-card">
         <h2>Import Employees From CSV</h2>
-        <p>Upload a UTF-8 CSV to create new employees and overwrite existing ones in one step. Existing employees are matched by <code>payroll_id</code> first, then <code>email</code>, then <code>user_id</code>. If a <code>payroll_id</code> does not already exist in the app database, the row is treated as a new employee and the database assigns the next payroll ID for that selected funding source using a 6-digit padded sequence. Each employee can be set to either <code>Annual Leave</code> or <code>Personal Leave</code>, not both. Imported rows always receive a random 10-character temporary password and are required to create a new password at first login.</p>
-        <p class="helper-text helper-text-left">Required columns: <code>first_name</code>, <code>last_name</code>, <code>email</code>, <code>hire_date</code>, <code>personal_leave</code> or <code>leave_type</code>, <code>funding_id</code> or <code>funding_source</code>. Optional columns: <code>payroll_id</code>, <code>user_id</code>, <code>role_name</code>, <code>workflow</code>, <code>is_active</code>. If <code>user_id</code> is blank, the app auto-generates it from first and last name. <code>temporary_password</code> is accepted for backward compatibility but ignored because the app now generates temporary passwords automatically. Import also accepts the older <code>department_id</code>, <code>department_name</code>, and <code>reports_to_user_id</code> headers for compatibility.</p>
+        <p>Upload a UTF-8 CSV to create new employees and overwrite existing ones in one step. Existing employees are matched by <code>payroll_id</code> first, then <code>email</code>, then <code>user_id</code>. If a <code>payroll_id</code> does not already exist in the app database, the row is treated as a new employee and the database assigns the next payroll ID for that selected funding source using a 6-digit padded sequence. Each employee can be set to either <code>Annual Leave</code> or <code>Personal Leave</code>, not both. Imported rows always receive a one-time password setup link for first login.</p>
+        <p class="helper-text helper-text-left">Required columns: <code>first_name</code>, <code>last_name</code>, <code>email</code>, <code>hire_date</code>, <code>personal_leave</code> or <code>leave_type</code>, <code>funding_id</code> or <code>funding_source</code>. Optional columns: <code>payroll_id</code>, <code>user_id</code>, <code>role_name</code>, <code>workflow</code>, <code>is_active</code>. If <code>user_id</code> is blank, the app auto-generates it from first and last name. <code>temporary_password</code> is accepted for backward compatibility but ignored because the app now generates setup links automatically. Import also accepts the older <code>department_id</code>, <code>department_name</code>, and <code>reports_to_user_id</code> headers for compatibility.</p>
         <pre class="csv-example">Funding Id,FirstName,LastName,Email,RoleName,LeaveType,Workflow,HireDate,IsActive
 22,Jane,Doe,jane.doe@example.org,User,Annual,mary.manager,2026-04-15,Yes
 21,Pat,Owner,pat.owner@example.org,Owner,Personal,,2026-04-15,Yes</pre>
@@ -144,10 +144,10 @@
     </article>
     {% endif %}
 
-    {% if generated_import_passwords %}
+    {% if generated_setup_links %}
     <article class="card wide-card password-results-card">
-        <h2>Generated Temporary Passwords</h2>
-        <p>These auto-generated passwords are shown once after import. Share them securely with the employees listed below.</p>
+        <h2>Generated Password Setup Links</h2>
+        <p>These one-time setup links are shown once after create, import, or reset. Share them securely with the employees listed below.</p>
         <div class="table-wrap">
             <table>
                 <thead>
@@ -156,17 +156,17 @@
                         <th>Employee ID</th>
                         <th>Name</th>
                         <th>Email</th>
-                        <th>Temporary Password</th>
+                        <th>Password Setup Link</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for item in generated_import_passwords %}
+                    {% for item in generated_setup_links %}
                     <tr>
                         <td>{{ item.payroll_id }}</td>
                         <td>{{ item.employee_id }}</td>
                         <td>{{ item.full_name }}</td>
                         <td>{{ item.email }}</td>
-                        <td><code>{{ item.temporary_password }}</code></td>
+                        <td><code>{{ item.setup_link }}</code></td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -274,8 +274,8 @@
             <input type="hidden" name="payroll_id" value="{{ selected_employee.PayrollId }}">
             <input type="hidden" name="employee_name" value="{{ selected_employee.FirstName }} {{ selected_employee.LastName }}">
             <input type="hidden" name="employee_email" value="{{ selected_employee.Email }}">
-            <p class="helper-text helper-text-left">This generates a new random 10-character temporary password and forces the employee to change it at next login.</p>
-            <button type="submit">Generate Temporary Password</button>
+            <p class="helper-text helper-text-left">This generates a new one-time password setup link for the employee.</p>
+            <button type="submit">Generate Setup Link</button>
         </form>
         {% endif %}
         {% else %}

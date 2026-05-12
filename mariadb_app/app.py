@@ -34,6 +34,7 @@ app.secret_key = os.getenv("FLASK_SECRET_KEY", "change-this-secret-key")
 app.permanent_session_lifetime = timedelta(minutes=10)
 CONNECTION_STRING_FILE = os.path.join(os.path.dirname(__file__), "employee_time_tracking_connection_string.txt")
 _connection_target_logged = False
+_password_setup_schema_ready = False
 PAY_PERIOD_END_ANCHOR = date(2026, 4, 24)
 
 LEAVE_APPROVER_ROLES = {"Owner", "Executive Director", "Director", "Manager"}
@@ -194,27 +195,6 @@ def build_default_user_id(first_name: str, last_name: str, email: str = "") -> s
     return first or last
 
 
-def generate_temporary_password(length: int = 10) -> str:
-    uppercase = "ABCDEFGHJKLMNPQRSTUVWXYZ"
-    lowercase = "abcdefghijkmnopqrstuvwxyz"
-    digits = "23456789"
-    symbols = "!@#$%^&*?"
-    all_characters = uppercase + lowercase + digits + symbols
-
-    while True:
-        password_chars = [
-            secrets.choice(uppercase),
-            secrets.choice(lowercase),
-            secrets.choice(digits),
-            secrets.choice(symbols),
-        ]
-        password_chars.extend(secrets.choice(all_characters) for _ in range(max(length - 4, 0)))
-        secrets.SystemRandom().shuffle(password_chars)
-        password = "".join(password_chars)
-        if len(password) >= 8:
-            return password
-
-
 def validate_password_complexity(password: str) -> Optional[str]:
     if len(password) < 8:
         return "Password must be at least 8 characters."
@@ -254,15 +234,19 @@ def password_reset_email_is_configured() -> bool:
     return bool(settings["host"] and settings["from_email"])
 
 
-def send_password_reset_email(recipient_email: str, recipient_name: str, temporary_password: str):
+def invitations_enabled() -> bool:
+    return env_flag("ENABLE_PASSWORD_SETUP_EMAIL", False)
+
+
+def send_password_setup_email(recipient_email: str, recipient_name: str, setup_link: str):
     settings = smtp_settings()
     if not password_reset_email_is_configured():
         raise RuntimeError(
-            "Password reset email is not configured. Set SMTP_HOST and SMTP_FROM_EMAIL first."
+            "Password setup email is not configured. Set SMTP_HOST and SMTP_FROM_EMAIL first."
         )
 
     message = EmailMessage()
-    message["Subject"] = "Your MCAEOC Employee Time Tracking temporary password"
+    message["Subject"] = "Set up your MCAEOC Employee Time Tracking password"
     message["From"] = (
         f"{settings['from_name']} <{settings['from_email']}>"
         if settings["from_name"]
@@ -275,12 +259,13 @@ def send_password_reset_email(recipient_email: str, recipient_name: str, tempora
             [
                 f"Hello {safe_name},",
                 "",
-                "A password reset was requested for your MCAEOC Employee Time Tracking account.",
+                "A password setup or reset was requested for your MCAEOC Employee Time Tracking account.",
                 "",
-                f"Temporary password: {temporary_password}",
+                "Use the secure one-time link below to create your password:",
+                setup_link,
                 "",
-                "Use this temporary password to sign in, then create a new password when prompted.",
-                "If you did not request this reset, contact your administrator right away.",
+                "This link can only be used once and will expire automatically.",
+                "If you did not expect this message, contact your administrator right away.",
             ]
         )
     )
@@ -305,6 +290,94 @@ def send_password_reset_email(recipient_email: str, recipient_name: str, tempora
         if username:
             server.login(username, password or "")
         server.send_message(message)
+
+
+def ensure_password_setup_schema(conn):
+    global _password_setup_schema_ready
+    if _password_setup_schema_ready:
+        return
+
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS dbo.PasswordSetupTokens
+        (
+            PasswordSetupTokenId INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            EmployeeId INT NOT NULL,
+            TokenHash CHAR(64) NOT NULL,
+            Purpose VARCHAR(30) NOT NULL DEFAULT 'Setup',
+            ExpiresAt DATETIME(6) NOT NULL,
+            UsedAt DATETIME(6) NULL,
+            CreatedAt DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+            CONSTRAINT FK_PasswordSetupTokens_Employees FOREIGN KEY (EmployeeId) REFERENCES dbo.Employees(EmployeeId),
+            UNIQUE KEY UX_PasswordSetupTokens_TokenHash (TokenHash)
+        ) ENGINE=InnoDB
+        """
+    )
+    conn.commit()
+    _password_setup_schema_ready = True
+
+
+def hash_setup_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest().upper()
+
+
+def build_app_base_url() -> str:
+    configured = os.getenv("APP_BASE_URL", "").strip()
+    if configured:
+        return configured.rstrip("/")
+
+    try:
+        return request.url_root.rstrip("/")
+    except RuntimeError:
+        return "http://localhost:8000"
+
+
+def create_password_setup_link(conn, employee_id: int, purpose: str = "Setup", expires_hours: int = 24) -> str:
+    ensure_password_setup_schema(conn)
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        UPDATE dbo.PasswordSetupTokens
+        SET UsedAt = UTC_TIMESTAMP(6)
+        WHERE EmployeeId = ?
+          AND UsedAt IS NULL
+        """,
+        employee_id,
+    )
+
+    token = secrets.token_urlsafe(32)
+    token_hash = hash_setup_token(token)
+    cursor.execute(
+        """
+        INSERT INTO dbo.PasswordSetupTokens
+        (
+            EmployeeId,
+            TokenHash,
+            Purpose,
+            ExpiresAt
+        )
+        VALUES
+        (
+            ?, ?, ?, DATE_ADD(UTC_TIMESTAMP(6), INTERVAL ? HOUR)
+        )
+        """,
+        employee_id,
+        token_hash,
+        purpose,
+        expires_hours,
+    )
+    conn.commit()
+    return f"{build_app_base_url()}/set-password/{token}"
+
+
+def is_seeded_owner_account(user) -> bool:
+    if not user:
+        return False
+    return (
+        str(getattr(user, "Email", "")).strip().lower() == "admin@mcaeoc.org"
+        and str(getattr(user, "RoleName", "")).strip() == "Owner"
+    )
 
 
 def parse_csv_bool(value: str) -> int:
@@ -1109,7 +1182,7 @@ def login():
         session.permanent = True
         session["last_biweekly_accrual_check"] = ""
 
-        if user.MustChangePassword:
+        if user.MustChangePassword and not is_seeded_owner_account(user):
             flash("Create a new password before continuing.", "info")
             return redirect(url_for("change_password"))
 
@@ -1120,10 +1193,17 @@ def login():
 
 @app.route("/forgot-password", methods=["GET", "POST"])
 def forgot_password():
+    if not invitations_enabled():
+        flash(
+            "Password setup emails are disabled while the app is being tuned. Contact the Owner for a setup link.",
+            "info",
+        )
+        return redirect(url_for("login"))
+
     if request.method == "POST":
         email = request.form.get("email", "").strip().lower()
         generic_message = (
-            "If an active account exists for that email address, a temporary password has been sent."
+            "If an active account exists for that email address, a one-time password setup link has been sent."
         )
 
         if not email:
@@ -1160,31 +1240,17 @@ def forgot_password():
                 flash(generic_message, "info")
                 return redirect(url_for("login"))
 
-            temporary_password = generate_temporary_password()
-            password_salt = os.urandom(8).hex().upper()
-            password_hash = hash_password(password_salt, temporary_password)
-
-            cursor.execute(
-                """
-                UPDATE dbo.Employees
-                SET PasswordSalt = ?, PasswordHash = ?, MustChangePassword = 1
-                WHERE EmployeeId = ?
-                """,
-                password_salt,
-                password_hash,
-                employee.EmployeeId,
-            )
-
+            setup_link = create_password_setup_link(conn, employee.EmployeeId, "Reset")
             try:
-                send_password_reset_email(
+                send_password_setup_email(
                     recipient_email=employee.Email,
                     recipient_name=employee.FullName,
-                    temporary_password=temporary_password,
+                    setup_link=setup_link,
                 )
             except Exception:
                 conn.rollback()
                 flash(
-                    "We could not send the password reset email right now. Please try again or contact your administrator.",
+                    "We could not send the password setup email right now. Please try again or contact your administrator.",
                     "error",
                 )
                 return render_template(
@@ -1241,6 +1307,76 @@ def change_password():
         return redirect(url_for("dashboard"))
 
     return render_template("change_password.html")
+
+
+@app.route("/set-password/<token>", methods=["GET", "POST"])
+def set_password(token: str):
+    token_hash = hash_setup_token(token)
+
+    with get_connection() as conn:
+        ensure_password_setup_schema(conn)
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT
+                PST.PasswordSetupTokenId,
+                PST.EmployeeId,
+                PST.ExpiresAt,
+                PST.UsedAt,
+                LTRIM(RTRIM(CONCAT(E.FirstName, ' ', E.LastName))) AS FullName,
+                E.Email
+            FROM dbo.PasswordSetupTokens PST
+            INNER JOIN dbo.Employees E ON E.EmployeeId = PST.EmployeeId
+            WHERE PST.TokenHash = ?
+            LIMIT 1
+            """,
+            token_hash,
+        )
+        token_row = cursor.fetchone()
+
+        if not token_row or token_row.UsedAt is not None or token_row.ExpiresAt < datetime.utcnow():
+            flash("That password setup link is invalid or has expired.", "error")
+            return redirect(url_for("login"))
+
+        if request.method == "POST":
+            new_password = request.form["new_password"]
+            confirm_password = request.form["confirm_password"]
+
+            complexity_error = validate_password_complexity(new_password)
+            if complexity_error:
+                flash(complexity_error, "error")
+                return render_template("change_password.html", token=token, setup_mode=True)
+
+            if new_password != confirm_password:
+                flash("Passwords do not match.", "error")
+                return render_template("change_password.html", token=token, setup_mode=True)
+
+            new_salt = os.urandom(8).hex().upper()
+            new_hash = hash_password(new_salt, new_password)
+            cursor.execute(
+                """
+                UPDATE dbo.Employees
+                SET PasswordSalt = ?, PasswordHash = ?, MustChangePassword = 0
+                WHERE EmployeeId = ?
+                """,
+                new_salt,
+                new_hash,
+                token_row.EmployeeId,
+            )
+            cursor.execute(
+                """
+                UPDATE dbo.PasswordSetupTokens
+                SET UsedAt = UTC_TIMESTAMP(6)
+                WHERE PasswordSetupTokenId = ?
+                """,
+                token_row.PasswordSetupTokenId,
+            )
+            conn.commit()
+
+            flash("Password created successfully. You can sign in now.", "success")
+            return redirect(url_for("login"))
+
+    return render_template("change_password.html", token=token, setup_mode=True)
 
 
 @app.route("/dashboard")
@@ -1769,9 +1905,8 @@ def owner_employees():
                         "error",
                     )
                     return redirect(url_for("owner_employees"))
-                temporary_password = generate_temporary_password()
                 salt = os.urandom(8).hex().upper()
-                password_hash = hash_password(salt, temporary_password)
+                password_hash = hash_password(salt, secrets.token_urlsafe(24))
                 try:
                     cursor.execute(
                         """
@@ -1801,6 +1936,9 @@ def owner_employees():
                         password_hash,
                     )
                     created_row = cursor.fetchone()
+                    setup_link = None
+                    if created_row is not None:
+                        setup_link = create_password_setup_link(conn, getattr(created_row, "EmployeeId", 0), "Setup")
                     conn.commit()
                 except pyodbc.Error as exc:
                     conn.rollback()
@@ -1818,16 +1956,16 @@ def owner_employees():
                     return redirect(url_for("owner_employees"))
 
                 if created_row is not None:
-                    session["generated_import_passwords"] = [
+                    session["generated_setup_links"] = [
                         {
                             "payroll_id": getattr(created_row, "PayrollId", ""),
                             "employee_id": getattr(created_row, "EmployeeId", ""),
                             "full_name": f"{first_name} {last_name}".strip(),
                             "email": email,
-                            "temporary_password": temporary_password,
+                            "setup_link": setup_link or "",
                         }
                     ]
-                flash("Employee created. A random temporary password was generated and the employee will be asked to change it on first login.", "success")
+                flash("Employee created. A one-time password setup link was generated for first login.", "success")
                 return redirect(url_for("owner_employees"))
             elif action == "import_csv":
                 if viewer_role != "Owner":
@@ -1851,7 +1989,7 @@ def owner_employees():
                 updated_count = 0
                 duplicate_notice_count = 0
                 error_messages = []
-                generated_passwords = []
+                generated_setup_links = []
                 payroll_id_mappings = []
 
                 for row in import_rows:
@@ -1862,7 +2000,7 @@ def owner_employees():
                             raise ValueError("First name and last name are required.")
 
                         role_name = row["role_name"] or "User"
-                        temporary_password = generate_temporary_password()
+                        temporary_secret = secrets.token_urlsafe(24)
 
                         email = row["email"]
                         if not email:
@@ -1901,7 +2039,7 @@ def owner_employees():
                                 )
 
                         salt = os.urandom(8).hex().upper()
-                        password_hash = hash_password(salt, temporary_password)
+                        password_hash = hash_password(salt, temporary_secret)
                         personal_leave_value = parse_csv_bool(row["personal_leave"])
 
                         if matched_employee is None:
@@ -2012,17 +2150,18 @@ def owner_employees():
                                 salt,
                                 password_hash,
                             )
+                            setup_link = create_password_setup_link(conn, matched_employee.EmployeeId, "Setup")
                         conn.commit()
                         employees_by_payroll_id, employees_by_email, employees_by_user_id = fetch_employee_import_lookup(cursor)
                         if matched_employee is not None:
-                            generated_passwords.append(
+                            generated_setup_links.append(
                                 {
                                     "line_number": row["line_number"],
                                     "employee_id": matched_employee.EmployeeId,
                                     "payroll_id": matched_employee.PayrollId,
                                     "full_name": f"{first_name} {last_name}".strip(),
                                     "email": email,
-                                    "temporary_password": temporary_password,
+                                    "setup_link": setup_link,
                                 }
                             )
                         if matched_employee is not None:
@@ -2052,10 +2191,10 @@ def owner_employees():
                         f"{duplicate_notice_count} duplicate employee row(s) matched an existing employee by payroll ID, email, or user ID and were updated instead of added.",
                         "info",
                     )
-                if generated_passwords:
-                    session["generated_import_passwords"] = generated_passwords
+                if generated_setup_links:
+                    session["generated_setup_links"] = generated_setup_links
                     flash(
-                        f"Generated secure temporary passwords for {len(generated_passwords)} employee(s). Save them now because they are only shown once.",
+                        f"Generated one-time password setup links for {len(generated_setup_links)} employee(s). Save them now because they are only shown once.",
                         "info",
                     )
                 if payroll_id_mappings:
@@ -2080,9 +2219,9 @@ def owner_employees():
                     flash("You do not have access to that employee.", "error")
                     return redirect(url_for("owner_employees"))
 
-                temporary_password = generate_temporary_password()
+                temporary_secret = secrets.token_urlsafe(24)
                 salt = os.urandom(8).hex().upper()
-                password_hash = hash_password(salt, temporary_password)
+                password_hash = hash_password(salt, temporary_secret)
                 cursor.execute(
                     """
                     EXEC dbo.usp_ResetEmployeePassword
@@ -2094,17 +2233,18 @@ def owner_employees():
                     salt,
                     password_hash,
                 )
+                setup_link = create_password_setup_link(conn, employee_id, "Reset")
                 conn.commit()
-                session["generated_import_passwords"] = [
+                session["generated_setup_links"] = [
                     {
                         "employee_id": employee_id,
                         "payroll_id": request.form.get("payroll_id", ""),
                         "full_name": request.form.get("employee_name", "").strip(),
                         "email": request.form.get("employee_email", "").strip(),
-                        "temporary_password": temporary_password,
+                        "setup_link": setup_link,
                     }
                 ]
-                flash("Password reset. A random temporary password was generated and the employee will be prompted to change it at next login.", "success")
+                flash("Password reset. A one-time password setup link was generated for the employee.", "success")
                 return redirect(url_for("owner_employees", employee_id=employee_id))
             else:
                 employee_id = int(request.form["employee_id"])
