@@ -456,7 +456,7 @@ def parse_employee_import_csv(uploaded_file) -> list[dict]:
     normalized_fieldnames = {
         normalize_csv_column_name(fieldname): fieldname for fieldname in reader.fieldnames
     }
-    required_columns = {"first_name", "last_name", "email", "hire_date", "personal_leave"}
+    required_columns = {"first_name", "last_name", "email", "personal_leave"}
     missing_columns = [column for column in required_columns if column not in normalized_fieldnames]
     if missing_columns:
         raise ValueError(
@@ -496,6 +496,22 @@ def parse_employee_import_csv(uploaded_file) -> list[dict]:
         raise ValueError("CSV file does not contain any employee rows.")
 
     return rows
+
+
+def normalize_import_hire_date(value: str) -> str:
+    raw_value = (value or "").strip()
+    if not raw_value:
+        return ""
+
+    for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y"):
+        try:
+            return datetime.strptime(raw_value, fmt).date().isoformat()
+        except ValueError:
+            continue
+
+    raise ValueError(
+        f"Hire date '{raw_value}' is invalid. Use YYYY-MM-DD or M/D/YYYY."
+    )
 
 
 def fetch_supervisor_lookup(cursor):
@@ -845,9 +861,11 @@ def resolve_supervisor_user_id(
 def resolve_department_id(row: dict, departments_by_id: dict[str, int], departments_by_name: dict[str, int]) -> int:
     department_id_value = row.get("department_id", "").strip()
     department_name_value = row.get("department_name", "").strip().lower()
+    payroll_id_value = row.get("payroll_id", "").strip()
 
     resolved_from_id = None
     resolved_from_name = None
+    resolved_from_payroll = None
 
     if department_id_value:
         resolved_from_id = departments_by_id.get(department_id_value)
@@ -859,10 +877,32 @@ def resolve_department_id(row: dict, departments_by_id: dict[str, int], departme
         if resolved_from_name is None:
             raise ValueError(f"Funding source '{row.get('department_name', '')}' was not found.")
 
+    if payroll_id_value and len(payroll_id_value) >= 2 and payroll_id_value[:2].isdigit():
+        resolved_from_payroll = departments_by_id.get(payroll_id_value[:2])
+
     if resolved_from_id is not None and resolved_from_name is not None and resolved_from_id != resolved_from_name:
         raise ValueError("Funding ID and funding source point to different funding sources.")
 
-    resolved_value = resolved_from_id if resolved_from_id is not None else resolved_from_name
+    if (
+        resolved_from_id is not None
+        and resolved_from_payroll is not None
+        and resolved_from_id != resolved_from_payroll
+    ):
+        raise ValueError("Funding ID and payroll ID point to different funding sources.")
+    if (
+        resolved_from_name is not None
+        and resolved_from_payroll is not None
+        and resolved_from_name != resolved_from_payroll
+    ):
+        raise ValueError("Funding source and payroll ID point to different funding sources.")
+
+    resolved_value = (
+        resolved_from_id
+        if resolved_from_id is not None
+        else resolved_from_name
+        if resolved_from_name is not None
+        else resolved_from_payroll
+    )
     if resolved_value is None:
         raise ValueError("Funding source is required.")
     return resolved_value
@@ -2219,6 +2259,7 @@ def owner_employees():
                             raise ValueError("User ID could not be generated. Provide a user_id in the CSV.")
                         user_id = user_id.lower()
                         department_id = resolve_department_id(row, departments_by_id, departments_by_name)
+                        normalized_hire_date = normalize_import_hire_date(row["hire_date"])
 
                         reports_to_user_id = resolve_supervisor_user_id(
                             row,
@@ -2245,6 +2286,12 @@ def owner_employees():
                                 raise ValueError(
                                     "Payroll ID, email, and user ID point to different employees."
                                 )
+
+                        if not normalized_hire_date:
+                            if matched_employee is not None and getattr(matched_employee, "HireDate", None):
+                                normalized_hire_date = matched_employee.HireDate.isoformat()
+                            else:
+                                normalized_hire_date = date.today().isoformat()
 
                         salt = os.urandom(8).hex().upper()
                         password_hash = hash_password(salt, temporary_secret)
@@ -2274,7 +2321,7 @@ def owner_employees():
                                 department_id,
                                 personal_leave_value,
                                 reports_to_user_id,
-                                row["hire_date"],
+                                normalized_hire_date,
                                 salt,
                                 password_hash,
                             )
@@ -2307,7 +2354,7 @@ def owner_employees():
                                     department_id,
                                     personal_leave_value,
                                     reports_to_user_id,
-                                    row["hire_date"],
+                                    normalized_hire_date,
                                     parse_csv_yes_no(row["is_active"], "IsActive"),
                                 )
                         else:
@@ -2340,7 +2387,7 @@ def owner_employees():
                                 department_id,
                                 personal_leave_value,
                                 reports_to_user_id,
-                                row["hire_date"],
+                                normalized_hire_date,
                                 is_active_value,
                             )
                             updated_count += 1
