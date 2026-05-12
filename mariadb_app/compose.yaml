@@ -11,8 +11,6 @@ services:
     volumes:
       - mariadb_data:/var/lib/mysql
       - ./schema_mariadb.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
-    ports:
-      - "3306:3306"
 
   web:
     build: .
