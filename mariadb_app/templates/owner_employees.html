@@ -2,180 +2,6 @@
 
 {% block content %}
 <section class="grid">
-    {% if session.get("role_name") == "Owner" %}
-    <article class="card wide-card">
-        <h2>Add Funding Source</h2>
-        <p>Funding sources drive the payroll ID prefix. New employees in a funding source get the next available 6-digit sequence after that funding source's current highest payroll number.</p>
-        <form method="post" class="grid-form" data-track-changes="true" data-confirm-save-message="Add this funding source?">
-            <input type="hidden" name="action" value="add_department">
-            <label>
-                Funding ID
-                <input type="number" name="new_department_id" min="1" step="1" required>
-            </label>
-            <label>
-                Funding source
-                <input type="text" name="new_department_name" required>
-            </label>
-            <button type="submit" class="full-span">Add Funding Source</button>
-        </form>
-    </article>
-
-    <article class="card wide-card">
-        <h2>Create Employee</h2>
-        <p>Each employee stays linked to a funding source and can also be assigned to a supervisor through Workflow. User ID is auto-generated from first and last name, and the app generates a one-time password setup link for first login.</p>
-        <form method="post" class="grid-form" data-track-changes="true" data-confirm-save-message="Create this employee record?">
-            <label>
-                First name
-                <input type="text" name="first_name" data-userid-first-name="true" required>
-            </label>
-            <label>
-                Last name
-                <input type="text" name="last_name" data-userid-last-name="true" required>
-            </label>
-            <label>
-                Email
-                <input type="email" name="email" required>
-            </label>
-            <label>
-                User ID
-                <input type="text" value="Auto-generated from first and last name" readonly>
-            </label>
-            <label>
-                Funding Source
-                <select name="department_id" required>
-                    <option value="">Select funding source</option>
-                    {% for department in departments %}
-                    <option value="{{ department.DepartmentId }}">{{ department.DepartmentId }} {{ department.DepartmentName }}</option>
-                    {% endfor %}
-                </select>
-            </label>
-            <label>
-                Role
-                <select name="role_name" required>
-                    {% for role in roles %}
-                    <option value="{{ role.RoleName }}" {% if role.RoleName == "User" %}selected{% endif %}>{{ role.RoleName }}</option>
-                    {% endfor %}
-                </select>
-            </label>
-            <label>
-                Leave Type
-                <select name="personal_leave" required>
-                    <option value="0">Annual Leave</option>
-                    <option value="1">Personal Leave</option>
-                </select>
-            </label>
-            <label>
-                Workflow
-                <select name="reports_to_user_id">
-                    <option value="">No Workflow Supervisor</option>
-                    {% for supervisor in supervisors %}
-                    <option value="{{ supervisor.UserId }}">{{ supervisor.FullName }} ({{ supervisor.UserId }} | Funding {{ supervisor.DepartmentId }} {{ supervisor.DepartmentName }})</option>
-                    {% endfor %}
-                </select>
-            </label>
-            <label>
-                Hire date
-                <input type="date" name="hire_date" required>
-            </label>
-            <button type="submit" class="full-span">Create Employee</button>
-        </form>
-    </article>
-
-    <article class="card wide-card">
-        <h2>Import Employees From CSV</h2>
-        <p>Upload a UTF-8 CSV to create new employees and overwrite existing ones in one step. Existing employees are matched by <code>payroll_id</code> first, then <code>email</code>, then <code>user_id</code>. If a <code>payroll_id</code> does not already exist in the app database, the row is treated as a new employee and the database assigns the next payroll ID for that selected funding source using a 6-digit padded sequence. Each employee can be set to either <code>Annual Leave</code> or <code>Personal Leave</code>, not both. Imported rows always receive a one-time password setup link for first login.</p>
-        <p class="helper-text helper-text-left">Required columns: <code>first_name</code>, <code>last_name</code>, <code>email</code>, <code>hire_date</code>, <code>personal_leave</code> or <code>leave_type</code>, <code>funding_id</code> or <code>funding_source</code>. Optional columns: <code>payroll_id</code>, <code>user_id</code>, <code>role_name</code>, <code>workflow</code>, <code>is_active</code>. If <code>user_id</code> is blank, the app auto-generates it from first and last name. <code>temporary_password</code> is accepted for backward compatibility but ignored because the app now generates setup links automatically. Import also accepts the older <code>department_id</code>, <code>department_name</code>, and <code>reports_to_user_id</code> headers for compatibility.</p>
-        <pre class="csv-example">Funding Id,FirstName,LastName,Email,RoleName,LeaveType,Workflow,HireDate,IsActive
-22,Jane,Doe,jane.doe@example.org,User,Annual,mary.manager,2026-04-15,Yes
-21,Pat,Owner,pat.owner@example.org,Owner,Personal,,2026-04-15,Yes</pre>
-        <form method="post" enctype="multipart/form-data" class="stack-form" data-track-changes="true" data-confirm-save-message="Import this CSV and overwrite any matching employee records?">
-            <input type="hidden" name="action" value="import_csv">
-            <label>
-                CSV file
-                <input type="file" name="csv_file" accept=".csv,text/csv" required>
-            </label>
-            <button type="submit">Import CSV</button>
-        </form>
-    </article>
-
-    <article class="card wide-card">
-        <h2>Export Employees</h2>
-        <p>Download the full employee list in either CSV or plain text format.</p>
-        <div class="button-row">
-            <a class="button-link" href="{{ url_for('export_employees', format='csv') }}">Export CSV</a>
-            <a class="button-link" href="{{ url_for('export_employees', format='txt') }}">Export TXT</a>
-        </div>
-    </article>
-
-    {% if import_payroll_id_mappings %}
-    <article class="card wide-card">
-        <h2>Import Payroll ID Mapping</h2>
-        <p>Download the original CSV payroll IDs alongside the actual payroll IDs stored in the database for the most recent import.</p>
-        <div class="button-row">
-            <a class="button-link" href="{{ url_for('download_import_payroll_mapping') }}">Download Payroll ID Mapping CSV</a>
-        </div>
-        <div class="table-wrap">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Employee ID</th>
-                        <th>CSV Payroll ID</th>
-                        <th>Database Payroll ID</th>
-                        <th>Name</th>
-                        <th>Result</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for item in import_payroll_id_mappings[:10] %}
-                    <tr>
-                        <td>{{ item.employee_id }}</td>
-                        <td>{{ item.csv_payroll_id or '' }}</td>
-                        <td>{{ item.database_payroll_id }}</td>
-                        <td>{{ item.full_name }}</td>
-                        <td>{{ item.result }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        {% if import_payroll_id_mappings|length > 10 %}
-        <p class="helper-text helper-text-left">Showing the first 10 rows. Download the CSV for the full mapping.</p>
-        {% endif %}
-    </article>
-    {% endif %}
-
-    {% if generated_setup_links %}
-    <article class="card wide-card password-results-card">
-        <h2>Generated Password Setup Links</h2>
-        <p>These one-time setup links are shown once after create, import, or reset. Share them securely with the employees listed below.</p>
-        <div class="table-wrap">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Payroll ID</th>
-                        <th>Employee ID</th>
-                        <th>Name</th>
-                        <th>Email</th>
-                        <th>Password Setup Link</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for item in generated_setup_links %}
-                    <tr>
-                        <td>{{ item.payroll_id }}</td>
-                        <td>{{ item.employee_id }}</td>
-                        <td>{{ item.full_name }}</td>
-                        <td>{{ item.email }}</td>
-                        <td><code>{{ item.setup_link }}</code></td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </article>
-    {% endif %}
-    {% endif %}
-
     <article class="card wide-card">
         <h2>Employee List</h2>
         {% if employees %}
@@ -289,6 +115,180 @@
         <p>Select an employee to edit.</p>
         {% endif %}
     </article>
+
+    {% if session.get("role_name") == "Owner" %}
+    <article class="card wide-card">
+        <h2>Create Employee</h2>
+        <p>Each employee stays linked to a funding source and can also be assigned to a supervisor through Workflow. User ID is auto-generated from first and last name, and the app generates a one-time password setup link for first login.</p>
+        <form method="post" class="grid-form" data-track-changes="true" data-confirm-save-message="Create this employee record?">
+            <label>
+                First name
+                <input type="text" name="first_name" data-userid-first-name="true" required>
+            </label>
+            <label>
+                Last name
+                <input type="text" name="last_name" data-userid-last-name="true" required>
+            </label>
+            <label>
+                Email
+                <input type="email" name="email" required>
+            </label>
+            <label>
+                User ID
+                <input type="text" value="Auto-generated from first and last name" readonly>
+            </label>
+            <label>
+                Funding Source
+                <select name="department_id" required>
+                    <option value="">Select funding source</option>
+                    {% for department in departments %}
+                    <option value="{{ department.DepartmentId }}">{{ department.DepartmentId }} {{ department.DepartmentName }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>
+                Role
+                <select name="role_name" required>
+                    {% for role in roles %}
+                    <option value="{{ role.RoleName }}" {% if role.RoleName == "User" %}selected{% endif %}>{{ role.RoleName }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>
+                Leave Type
+                <select name="personal_leave" required>
+                    <option value="0">Annual Leave</option>
+                    <option value="1">Personal Leave</option>
+                </select>
+            </label>
+            <label>
+                Workflow
+                <select name="reports_to_user_id">
+                    <option value="">No Workflow Supervisor</option>
+                    {% for supervisor in supervisors %}
+                    <option value="{{ supervisor.UserId }}">{{ supervisor.FullName }} ({{ supervisor.UserId }} | Funding {{ supervisor.DepartmentId }} {{ supervisor.DepartmentName }})</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>
+                Hire date
+                <input type="date" name="hire_date" required>
+            </label>
+            <button type="submit" class="full-span">Create Employee</button>
+        </form>
+    </article>
+
+    <article class="card wide-card">
+        <h2>Import Employees From CSV</h2>
+        <p>Upload a UTF-8 CSV to create new employees and overwrite existing ones in one step. Existing employees are matched by <code>payroll_id</code> first, then <code>email</code>, then <code>user_id</code>. If a <code>payroll_id</code> does not already exist in the app database, the row is treated as a new employee and the database assigns the next payroll ID for that selected funding source using a 6-digit padded sequence. Each employee can be set to either <code>Annual Leave</code> or <code>Personal Leave</code>, not both. Imported rows always receive a one-time password setup link for first login.</p>
+        <p class="helper-text helper-text-left">Required columns: <code>first_name</code>, <code>last_name</code>, <code>email</code>, <code>personal_leave</code> or <code>leave_type</code>, <code>funding_id</code> or <code>funding_source</code>. Optional columns: <code>hire_date</code>, <code>payroll_id</code>, <code>user_id</code>, <code>role_name</code>, <code>workflow</code>, <code>is_active</code>. If <code>user_id</code> is blank, the app auto-generates it from first and last name. <code>temporary_password</code> is accepted for backward compatibility but ignored because the app now generates setup links automatically. Import also accepts the older <code>department_id</code>, <code>department_name</code>, and <code>reports_to_user_id</code> headers for compatibility.</p>
+        <pre class="csv-example">Funding Id,FirstName,LastName,Email,RoleName,LeaveType,Workflow,HireDate,IsActive
+22,Jane,Doe,jane.doe@example.org,User,Annual,mary.manager,2026-04-15,Yes
+21,Pat,Owner,pat.owner@example.org,Owner,Personal,,2026-04-15,Yes</pre>
+        <form method="post" enctype="multipart/form-data" class="stack-form" data-track-changes="true" data-confirm-save-message="Import this CSV and overwrite any matching employee records?">
+            <input type="hidden" name="action" value="import_csv">
+            <label>
+                CSV file
+                <input type="file" name="csv_file" accept=".csv,text/csv" required>
+            </label>
+            <button type="submit">Import CSV</button>
+        </form>
+    </article>
+
+    <article class="card wide-card">
+        <h2>Export Employees</h2>
+        <p>Download the full employee list in either CSV or plain text format.</p>
+        <div class="button-row">
+            <a class="button-link" href="{{ url_for('export_employees', format='csv') }}">Export CSV</a>
+            <a class="button-link" href="{{ url_for('export_employees', format='txt') }}">Export TXT</a>
+        </div>
+    </article>
+
+    {% if import_payroll_id_mappings %}
+    <article class="card wide-card">
+        <h2>Import Payroll ID Mapping</h2>
+        <p>Download the original CSV payroll IDs alongside the actual payroll IDs stored in the database for the most recent import.</p>
+        <div class="button-row">
+            <a class="button-link" href="{{ url_for('download_import_payroll_mapping') }}">Download Payroll ID Mapping CSV</a>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Employee ID</th>
+                        <th>CSV Payroll ID</th>
+                        <th>Database Payroll ID</th>
+                        <th>Name</th>
+                        <th>Result</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in import_payroll_id_mappings[:10] %}
+                    <tr>
+                        <td>{{ item.employee_id }}</td>
+                        <td>{{ item.csv_payroll_id or '' }}</td>
+                        <td>{{ item.database_payroll_id }}</td>
+                        <td>{{ item.full_name }}</td>
+                        <td>{{ item.result }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if import_payroll_id_mappings|length > 10 %}
+        <p class="helper-text helper-text-left">Showing the first 10 rows. Download the CSV for the full mapping.</p>
+        {% endif %}
+    </article>
+    {% endif %}
+
+    <article class="card wide-card">
+        <h2>Add Funding Source</h2>
+        <p>Funding sources drive the payroll ID prefix. New employees in a funding source get the next available 6-digit sequence after that funding source's current highest payroll number.</p>
+        <form method="post" class="grid-form" data-track-changes="true" data-confirm-save-message="Add this funding source?">
+            <input type="hidden" name="action" value="add_department">
+            <label>
+                Funding ID
+                <input type="number" name="new_department_id" min="1" step="1" required>
+            </label>
+            <label>
+                Funding source
+                <input type="text" name="new_department_name" required>
+            </label>
+            <button type="submit" class="full-span">Add Funding Source</button>
+        </form>
+    </article>
+
+    {% if generated_setup_links %}
+    <article class="card wide-card password-results-card">
+        <h2>Generated Password Setup Links</h2>
+        <p>These one-time setup links are shown once after create, import, or reset. Share them securely with the employees listed below.</p>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Payroll ID</th>
+                        <th>Employee ID</th>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Password Setup Link</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in generated_setup_links %}
+                    <tr>
+                        <td>{{ item.payroll_id }}</td>
+                        <td>{{ item.employee_id }}</td>
+                        <td>{{ item.full_name }}</td>
+                        <td>{{ item.email }}</td>
+                        <td><code>{{ item.setup_link }}</code></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </article>
+    {% endif %}
+    {% endif %}
 </section>
 <script>
     (function () {
