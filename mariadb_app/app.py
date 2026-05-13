@@ -536,7 +536,15 @@ def fetch_supervisor_lookup(cursor):
     )
     rows = cursor.fetchall()
     by_payroll_id = {str(row.PayrollId): row.UserId for row in rows}
-    by_user_id = {str(row.UserId).strip().lower(): row.UserId for row in rows if row.UserId}
+    by_user_id = {}
+    for row in rows:
+        if not row.UserId:
+            continue
+        raw_user_id = str(row.UserId).strip()
+        by_user_id[raw_user_id.lower()] = row.UserId
+        normalized_user_id = normalize_user_id_candidate(raw_user_id)
+        if normalized_user_id:
+            by_user_id.setdefault(normalized_user_id, row.UserId)
     return by_payroll_id, by_user_id
 
 
@@ -1024,7 +1032,9 @@ def resolve_supervisor_user_id(
     supervisor_user_ids_by_user_id: dict[str, str],
 ) -> Optional[str]:
     reports_to_payroll_id = row.get("reports_to_payroll_id", "").strip()
-    reports_to_user_id = row["reports_to_user_id"].strip().lower()
+    raw_reports_to_user_id = row["reports_to_user_id"].strip()
+    reports_to_user_id = raw_reports_to_user_id.lower()
+    normalized_reports_to_user_id = normalize_user_id_candidate(raw_reports_to_user_id)
 
     if not reports_to_payroll_id and not reports_to_user_id:
         return None
@@ -1041,9 +1051,11 @@ def resolve_supervisor_user_id(
 
     if reports_to_user_id:
         resolved_from_user_id = supervisor_user_ids_by_user_id.get(reports_to_user_id)
+        if resolved_from_user_id is None and normalized_reports_to_user_id:
+            resolved_from_user_id = supervisor_user_ids_by_user_id.get(normalized_reports_to_user_id)
         if resolved_from_user_id is None:
             raise ValueError(
-                f"Workflow user ID '{reports_to_user_id}' was not found in the active supervisor list."
+                f"Workflow user ID '{raw_reports_to_user_id}' was not found in the active supervisor list."
             )
 
     if (
@@ -2582,36 +2594,38 @@ def owner_employees():
                             employees_by_payroll_id, employees_by_email, employees_by_user_id = fetch_employee_import_lookup(cursor)
                             matched_employee = employees_by_payroll_id.get(payroll_id_value) or employees_by_email.get(email) or employees_by_user_id.get(user_id)
                             if matched_employee and row["is_active"]:
-                                matched_employee = canonicalize_existing_employee_identifiers(cursor, matched_employee.EmployeeId)
-                                if matched_employee is not None and (matched_employee.UserId or "").strip() != user_id:
-                                    reassign_employee_reports(cursor, matched_employee.UserId, user_id)
-                                cursor.execute(
-                                    """
-                                    EXEC dbo.usp_UpdateEmployee
-                                        @EmployeeId = ?,
-                                        @FirstName = ?,
-                                        @LastName = ?,
-                                        @Email = ?,
-                                        @UserId = ?,
-                                        @RoleName = ?,
-                                        @DepartmentId = ?,
-                                        @PersonalLeave = ?,
-                                        @ReportsToUserId = ?,
-                                        @HireDate = ?,
-                                        @IsActive = ?
-                                    """,
-                                    matched_employee.EmployeeId,
-                                    first_name,
-                                    last_name,
-                                    email,
-                                    user_id,
-                                    role_name,
-                                    department_id,
-                                    personal_leave_value,
-                                    reports_to_user_id,
-                                    normalized_hire_date,
-                                    parse_csv_yes_no(row["is_active"], "IsActive"),
-                                )
+                                desired_is_active = parse_csv_yes_no(row["is_active"], "IsActive")
+                                if desired_is_active != "Yes":
+                                    matched_employee = canonicalize_existing_employee_identifiers(cursor, matched_employee.EmployeeId)
+                                    if matched_employee is not None and (matched_employee.UserId or "").strip() != user_id:
+                                        reassign_employee_reports(cursor, matched_employee.UserId, user_id)
+                                    cursor.execute(
+                                        """
+                                        EXEC dbo.usp_UpdateEmployee
+                                            @EmployeeId = ?,
+                                            @FirstName = ?,
+                                            @LastName = ?,
+                                            @Email = ?,
+                                            @UserId = ?,
+                                            @RoleName = ?,
+                                            @DepartmentId = ?,
+                                            @PersonalLeave = ?,
+                                            @ReportsToUserId = ?,
+                                            @HireDate = ?,
+                                            @IsActive = ?
+                                        """,
+                                        matched_employee.EmployeeId,
+                                        first_name,
+                                        last_name,
+                                        email,
+                                        user_id,
+                                        role_name,
+                                        department_id,
+                                        personal_leave_value,
+                                        reports_to_user_id,
+                                        normalized_hire_date,
+                                        desired_is_active,
+                                    )
                         else:
                             matched_employee = canonicalize_existing_employee_identifiers(cursor, matched_employee.EmployeeId)
                             if matched_employee is not None and payroll_id_value and matched_employee.PayrollId != payroll_id_value:

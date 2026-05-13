@@ -921,9 +921,19 @@ CREATE PROCEDURE `usp_UpdateEmployee`(
 )
 BEGIN
     DECLARE v_RoleId INT;
+    DECLARE v_EmployeeExists INT DEFAULT 0;
     SELECT `RoleId` INTO v_RoleId FROM `Roles` WHERE `RoleName` = p_RoleName LIMIT 1;
     IF v_RoleId IS NULL THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invalid role name.';
+    END IF;
+
+    SELECT COUNT(*)
+      INTO v_EmployeeExists
+    FROM `Employees`
+    WHERE `EmployeeId` = p_EmployeeId;
+
+    IF v_EmployeeExists = 0 THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Employee not found.';
     END IF;
 
     UPDATE `Employees`
@@ -938,10 +948,6 @@ BEGIN
         `HireDate` = p_HireDate,
         `IsActive` = p_IsActive
     WHERE `EmployeeId` = p_EmployeeId;
-
-    IF ROW_COUNT() = 0 THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Employee not found.';
-    END IF;
 END$$
 
 DELIMITER ;
