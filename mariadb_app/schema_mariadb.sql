@@ -142,6 +142,47 @@ CREATE TABLE IF NOT EXISTS `MobileDevices` (
     CONSTRAINT `FK_MobileDevices_Employees` FOREIGN KEY (`EmployeeId`) REFERENCES `Employees` (`EmployeeId`)
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS `EmployeeDeviceMappings` (
+    `EmployeeDeviceMappingId` INT NOT NULL AUTO_INCREMENT,
+    `EmployeeId` INT NOT NULL,
+    `SystemName` VARCHAR(50) NOT NULL,
+    `ExternalUserId` VARCHAR(100) NOT NULL,
+    `ExternalUserName` VARCHAR(200) NULL,
+    `DeviceIdentifier` VARCHAR(200) NULL,
+    `Notes` VARCHAR(500) NULL,
+    `IsActive` TINYINT(1) NOT NULL DEFAULT 1,
+    `CreatedAt` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    `UpdatedAt` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (`EmployeeDeviceMappingId`),
+    UNIQUE KEY `UX_EmployeeDeviceMappings_System_ExternalUserId` (`SystemName`, `ExternalUserId`),
+    KEY `IX_EmployeeDeviceMappings_EmployeeId` (`EmployeeId`),
+    KEY `IX_EmployeeDeviceMappings_DeviceIdentifier` (`DeviceIdentifier`),
+    CONSTRAINT `FK_EmployeeDeviceMappings_Employees` FOREIGN KEY (`EmployeeId`) REFERENCES `Employees` (`EmployeeId`)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS `DevicePunchImports` (
+    `DevicePunchImportId` INT NOT NULL AUTO_INCREMENT,
+    `SystemName` VARCHAR(50) NOT NULL,
+    `DeviceIdentifier` VARCHAR(200) NOT NULL,
+    `ExternalUserId` VARCHAR(100) NOT NULL,
+    `ExternalUserName` VARCHAR(200) NULL,
+    `PunchTimestamp` DATETIME(6) NOT NULL,
+    `PunchDirection` VARCHAR(20) NULL,
+    `ImportStatus` VARCHAR(20) NOT NULL DEFAULT 'Pending',
+    `FailureReason` VARCHAR(500) NULL,
+    `RawPayloadJson` LONGTEXT NULL,
+    `EmployeeId` INT NULL,
+    `CreatedTimeEntryId` INT NULL,
+    `CreatedAt` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (`DevicePunchImportId`),
+    UNIQUE KEY `UX_DevicePunchImports_SourcePunch` (`SystemName`, `DeviceIdentifier`, `ExternalUserId`, `PunchTimestamp`),
+    KEY `IX_DevicePunchImports_EmployeeId` (`EmployeeId`),
+    KEY `IX_DevicePunchImports_CreatedTimeEntryId` (`CreatedTimeEntryId`),
+    KEY `IX_DevicePunchImports_Status` (`ImportStatus`),
+    CONSTRAINT `FK_DevicePunchImports_Employees` FOREIGN KEY (`EmployeeId`) REFERENCES `Employees` (`EmployeeId`),
+    CONSTRAINT `FK_DevicePunchImports_TimeEntries` FOREIGN KEY (`CreatedTimeEntryId`) REFERENCES `TimeEntries` (`TimeEntryId`)
+) ENGINE=InnoDB;
+
 CREATE TABLE IF NOT EXISTS `FaceTemplates` (
     `FaceTemplateId` INT NOT NULL AUTO_INCREMENT,
     `EmployeeId` INT NOT NULL,
