@@ -796,26 +796,143 @@ def reassign_employee_reports(cursor, previous_user_id: str, next_user_id: Optio
     if not normalized_previous:
         return
 
+    previous_variants = {
+        normalized_previous,
+        normalized_previous.lower(),
+    }
+    normalized_candidate = normalize_user_id_candidate(normalized_previous)
+    if normalized_candidate:
+        previous_variants.add(normalized_candidate)
+        previous_variants.add(normalized_candidate.lower())
+
+    cursor.execute(
+        """
+        SELECT EmployeeId, ReportsToUserId
+        FROM dbo.Employees
+        WHERE ReportsToUserId IS NOT NULL
+        """
+    )
+    report_rows = cursor.fetchall()
+    matching_employee_ids = []
+    for row in report_rows:
+        raw_reports_to = (row.ReportsToUserId or "").strip()
+        if not raw_reports_to:
+            continue
+        report_variants = {
+            raw_reports_to,
+            raw_reports_to.lower(),
+        }
+        normalized_reports_to = normalize_user_id_candidate(raw_reports_to)
+        if normalized_reports_to:
+            report_variants.add(normalized_reports_to)
+            report_variants.add(normalized_reports_to.lower())
+        if previous_variants.intersection(report_variants):
+            matching_employee_ids.append(row.EmployeeId)
+
+    if not matching_employee_ids:
+        return
+
     if next_user_id:
+        placeholders = ", ".join(["?"] * len(matching_employee_ids))
         cursor.execute(
-            """
+            f"""
             UPDATE dbo.Employees
             SET ReportsToUserId = ?
-            WHERE ReportsToUserId = ?
+            WHERE EmployeeId IN ({placeholders})
             """,
             next_user_id.strip(),
-            normalized_previous,
+            *matching_employee_ids,
         )
         return
+
+    placeholders = ", ".join(["?"] * len(matching_employee_ids))
+    cursor.execute(
+        f"""
+        UPDATE dbo.Employees
+        SET ReportsToUserId = NULL
+        WHERE EmployeeId IN ({placeholders})
+        """,
+        *matching_employee_ids,
+    )
+
+
+def is_reports_to_fk_error(exc: Exception) -> bool:
+    message = str(exc or "")
+    return "FK_Employees_ReportsToUserId" in message
+
+
+def execute_employee_update_with_retry(
+    conn,
+    cursor,
+    *,
+    employee_id: int,
+    first_name: str,
+    last_name: str,
+    email: str,
+    user_id: str,
+    role_name: str,
+    department_id: int,
+    personal_leave_value: int,
+    reports_to_user_id: Optional[str],
+    hire_date: str,
+    is_active: str,
+):
+    def run_update():
+        cursor.execute(
+            """
+            EXEC dbo.usp_UpdateEmployee
+                @EmployeeId = ?,
+                @FirstName = ?,
+                @LastName = ?,
+                @Email = ?,
+                @UserId = ?,
+                @RoleName = ?,
+                @DepartmentId = ?,
+                @PersonalLeave = ?,
+                @ReportsToUserId = ?,
+                @HireDate = ?,
+                @IsActive = ?
+            """,
+            employee_id,
+            first_name,
+            last_name,
+            email,
+            user_id,
+            role_name,
+            department_id,
+            personal_leave_value,
+            reports_to_user_id,
+            hire_date,
+            is_active,
+        )
+
+    try:
+        run_update()
+        return
+    except pyodbc.Error as exc:
+        if not is_reports_to_fk_error(exc):
+            raise
+        conn.rollback()
+
+    current_employee = fetch_employee_by_id(cursor, employee_id)
+    if current_employee is None:
+        raise ValueError("Employee not found.")
+
+    current_user_id = (current_employee.UserId or "").strip()
+    if current_user_id and current_user_id != user_id:
+        reassign_employee_reports(cursor, current_user_id, user_id)
 
     cursor.execute(
         """
         UPDATE dbo.Employees
         SET ReportsToUserId = NULL
-        WHERE ReportsToUserId = ?
+        WHERE EmployeeId = ?
         """,
-        normalized_previous,
+        employee_id,
     )
+    conn.commit()
+
+    run_update()
 
 
 def resolve_supervisor_form_value(cursor, employee_id_value: str, user_id_value: Optional[str]) -> Optional[str]:
@@ -2599,32 +2716,20 @@ def owner_employees():
                                     matched_employee = canonicalize_existing_employee_identifiers(cursor, matched_employee.EmployeeId)
                                     if matched_employee is not None and (matched_employee.UserId or "").strip() != user_id:
                                         reassign_employee_reports(cursor, matched_employee.UserId, user_id)
-                                    cursor.execute(
-                                        """
-                                        EXEC dbo.usp_UpdateEmployee
-                                            @EmployeeId = ?,
-                                            @FirstName = ?,
-                                            @LastName = ?,
-                                            @Email = ?,
-                                            @UserId = ?,
-                                            @RoleName = ?,
-                                            @DepartmentId = ?,
-                                            @PersonalLeave = ?,
-                                            @ReportsToUserId = ?,
-                                            @HireDate = ?,
-                                            @IsActive = ?
-                                        """,
-                                        matched_employee.EmployeeId,
-                                        first_name,
-                                        last_name,
-                                        email,
-                                        user_id,
-                                        role_name,
-                                        department_id,
-                                        personal_leave_value,
-                                        reports_to_user_id,
-                                        normalized_hire_date,
-                                        desired_is_active,
+                                    execute_employee_update_with_retry(
+                                        conn,
+                                        cursor,
+                                        employee_id=matched_employee.EmployeeId,
+                                        first_name=first_name,
+                                        last_name=last_name,
+                                        email=email,
+                                        user_id=user_id,
+                                        role_name=role_name,
+                                        department_id=department_id,
+                                        personal_leave_value=personal_leave_value,
+                                        reports_to_user_id=reports_to_user_id,
+                                        hire_date=normalized_hire_date,
+                                        is_active=desired_is_active,
                                     )
                         else:
                             matched_employee = canonicalize_existing_employee_identifiers(cursor, matched_employee.EmployeeId)
@@ -2638,32 +2743,20 @@ def owner_employees():
                             )
                             if matched_employee is not None and (matched_employee.UserId or "").strip() != user_id:
                                 reassign_employee_reports(cursor, matched_employee.UserId, user_id)
-                            cursor.execute(
-                                """
-                                EXEC dbo.usp_UpdateEmployee
-                                    @EmployeeId = ?,
-                                    @FirstName = ?,
-                                    @LastName = ?,
-                                    @Email = ?,
-                                    @UserId = ?,
-                                    @RoleName = ?,
-                                    @DepartmentId = ?,
-                                    @PersonalLeave = ?,
-                                    @ReportsToUserId = ?,
-                                    @HireDate = ?,
-                                    @IsActive = ?
-                                """,
-                                matched_employee.EmployeeId,
-                                first_name,
-                                last_name,
-                                email,
-                                user_id,
-                                role_name,
-                                department_id,
-                                personal_leave_value,
-                                reports_to_user_id,
-                                normalized_hire_date,
-                                is_active_value,
+                            execute_employee_update_with_retry(
+                                conn,
+                                cursor,
+                                employee_id=matched_employee.EmployeeId,
+                                first_name=first_name,
+                                last_name=last_name,
+                                email=email,
+                                user_id=user_id,
+                                role_name=role_name,
+                                department_id=department_id,
+                                personal_leave_value=personal_leave_value,
+                                reports_to_user_id=reports_to_user_id,
+                                hire_date=normalized_hire_date,
+                                is_active=is_active_value,
                             )
                             updated_count += 1
 
@@ -2886,32 +2979,20 @@ def owner_employees():
                 try:
                     if (current_employee.UserId or "").strip() != user_id:
                         reassign_employee_reports(cursor, current_employee.UserId, user_id)
-                    cursor.execute(
-                        """
-                        EXEC dbo.usp_UpdateEmployee
-                            @EmployeeId = ?,
-                            @FirstName = ?,
-                            @LastName = ?,
-                            @Email = ?,
-                            @UserId = ?,
-                            @RoleName = ?,
-                            @DepartmentId = ?,
-                            @PersonalLeave = ?,
-                            @ReportsToUserId = ?,
-                            @HireDate = ?,
-                            @IsActive = ?
-                        """,
-                        employee_id,
-                        first_name,
-                        last_name,
-                        email,
-                        user_id,
-                        role_name,
-                        department_id,
-                        personal_leave,
-                        reports_to_user_id,
-                        hire_date,
-                        is_active,
+                    execute_employee_update_with_retry(
+                        conn,
+                        cursor,
+                        employee_id=employee_id,
+                        first_name=first_name,
+                        last_name=last_name,
+                        email=email,
+                        user_id=user_id,
+                        role_name=role_name,
+                        department_id=department_id,
+                        personal_leave_value=personal_leave,
+                        reports_to_user_id=reports_to_user_id,
+                        hire_date=hire_date,
+                        is_active=is_active,
                     )
                     conn.commit()
                 except pyodbc.Error as exc:
