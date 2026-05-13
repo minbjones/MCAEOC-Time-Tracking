@@ -1,7 +1,7 @@
 FirstName,LastName,Email,User Id,Payroll Id,Funding Id,Funding Source,RoleName,PersonalLeave,ReportsToUserId,HireDate,IsActive,TemporaryPassword
-BLANTON,JONES,blanton.jones@mcaeoc.org,BLANTON JONES,220126,22,,Owner,No,Priscilla Johnson,6/14/2024,Yes,
-CLARK,PHILLIPS,CLARK.PHILLIPS@MCAEOC.ORG,CLARK PHILLIPS,990019,99,,Director,No,,,Yes,
-DECARLA,RINKINES,decarla.rinkines@mcaeoc.org,DECARLA RINKINES,990016,99,,Director,No,,,Yes,
-JUANITA,MEDLIN,juanita.medlin@mcaeoc.org,JUANITA MEDLIN,010207,22,,User,Yes,,,Yes,
+BLANTON,JONES,blanton.jones@mcaeoc.org,BLANTON JONES,220126,22,,Director,No,Priscilla Johnson,6/14/2024,Yes,
+CLARK,PHILLIPS,CLARK.PHILLIPS@MCAEOC.ORG,CLARK PHILLIPS,990019,99,,Director,No,Priscilla Johnson,,Yes,
+DECARLA,RINKINES,decarla.rinkines@mcaeoc.org,DECARLA RINKINES,990016,99,,Director,No,Priscilla Johnson,,Yes,
+JUANITA,MEDLIN,juanita.medlin@mcaeoc.org,JUANITA MEDLIN,010207,22,,User,Yes,Priscilla Johnson,,Yes,
 Priscilla,Johnson,cilla.johnson@mcaeoc.org,Priscilla Johnson,990003,99,,Executive Director,No,,,Yes,
-Shirley,Pulliam,shirley.pulliam@mcaeoc.org,Shirley Pulliam,010203,1,,Director,No,,,Yes,
+Shirley,Pulliam,shirley.pulliam@mcaeoc.org,Shirley Pulliam,010203,1,,Director,No,Priscilla Johnson,,Yes,
