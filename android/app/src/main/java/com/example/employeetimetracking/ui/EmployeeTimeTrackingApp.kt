@@ -178,7 +178,7 @@ private fun KioskCameraScreen(
                                 title = "",
                                 captureButtonLabel = "Capture Now",
                                 helperText = if (sessionState.employees.any { it.has_face_template }) {
-                                    "Hands-free capture is active for enrolled employees."
+                                    "Hands-free capture is active for enrolled employees and scans about every 2 seconds."
                                 } else {
                                     "Enroll at least one employee to enable hands-free capture."
                                 },

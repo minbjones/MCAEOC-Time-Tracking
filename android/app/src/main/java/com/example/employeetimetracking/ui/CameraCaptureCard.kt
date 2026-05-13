@@ -55,7 +55,7 @@ fun CameraCaptureCard(
     previewHeight: androidx.compose.ui.unit.Dp = 280.dp,
     enabled: Boolean = true,
     autoCaptureEnabled: Boolean = false,
-    autoCaptureIntervalMs: Long = 5_000L,
+    autoCaptureIntervalMs: Long = 2_000L,
     autoCaptureBlockedUntilMillis: Long = 0L,
     onImageCaptured: (ByteArray) -> Unit
 ) {
@@ -101,7 +101,7 @@ fun CameraCaptureCard(
                 nextAutoCaptureAtMillis = now + autoCaptureIntervalMs
                 captureToBytes(context, controller, onImageCaptured)
             }
-            delay(1_000L)
+            delay(500L)
         }
     }
 

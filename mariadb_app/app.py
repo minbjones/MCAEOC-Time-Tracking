@@ -2509,6 +2509,9 @@ def owner_employees():
                             employees_by_payroll_id, employees_by_email, employees_by_user_id = fetch_employee_import_lookup(cursor)
                             matched_employee = employees_by_email.get(email) or employees_by_user_id.get(user_id)
                             if matched_employee and row["is_active"]:
+                                matched_employee = canonicalize_existing_employee_identifiers(cursor, matched_employee.EmployeeId)
+                                if matched_employee is not None and (matched_employee.UserId or "").strip() != user_id:
+                                    reassign_employee_reports(cursor, matched_employee.UserId, user_id)
                                 cursor.execute(
                                     """
                                     EXEC dbo.usp_UpdateEmployee
@@ -2537,11 +2540,14 @@ def owner_employees():
                                     parse_csv_yes_no(row["is_active"], "IsActive"),
                                 )
                         else:
+                            matched_employee = canonicalize_existing_employee_identifiers(cursor, matched_employee.EmployeeId)
                             is_active_value = (
                                 parse_csv_yes_no(row["is_active"], "IsActive")
                                 if row["is_active"]
                                 else matched_employee.IsActive
                             )
+                            if matched_employee is not None and (matched_employee.UserId or "").strip() != user_id:
+                                reassign_employee_reports(cursor, matched_employee.UserId, user_id)
                             cursor.execute(
                                 """
                                 EXEC dbo.usp_UpdateEmployee

@@ -116,7 +116,7 @@ class MainViewModel : ViewModel() {
                     )
                 )
             }.onSuccess { response ->
-                val cooldownUntil = System.currentTimeMillis() + if (response.success) 12_000L else 4_000L
+                val cooldownUntil = System.currentTimeMillis() + if (response.success) 8_000L else 2_000L
                 _sessionState.value = _sessionState.value.copy(
                     statusMessage = response.message,
                     greetingMessage = if (response.success && response.full_name != null && response.event_type != null) {
@@ -135,7 +135,7 @@ class MainViewModel : ViewModel() {
                 _sessionState.value = _sessionState.value.copy(
                     isLoading = false,
                     statusMessage = extractErrorMessage(error, "Face clocking failed."),
-                    autoCaptureCooldownUntilMillis = System.currentTimeMillis() + 4_000L
+                    autoCaptureCooldownUntilMillis = System.currentTimeMillis() + 2_000L
                 )
             }
         }
