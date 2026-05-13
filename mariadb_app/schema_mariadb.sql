@@ -664,6 +664,186 @@ BEGIN
     END IF;
 END$$
 
+CREATE PROCEDURE `usp_SaveEmployeeDeviceMapping`(
+    IN p_EmployeeId INT,
+    IN p_SystemName VARCHAR(50),
+    IN p_ExternalUserId VARCHAR(100),
+    IN p_ExternalUserName VARCHAR(200),
+    IN p_DeviceIdentifier VARCHAR(200),
+    IN p_Notes VARCHAR(500),
+    IN p_IsActive TINYINT(1)
+)
+BEGIN
+    DECLARE v_ExistingMappingId INT;
+
+    SELECT `EmployeeDeviceMappingId`
+      INTO v_ExistingMappingId
+    FROM `EmployeeDeviceMappings`
+    WHERE `SystemName` = p_SystemName
+      AND `ExternalUserId` = p_ExternalUserId
+    LIMIT 1;
+
+    IF v_ExistingMappingId IS NULL THEN
+        INSERT INTO `EmployeeDeviceMappings`
+        (
+            `EmployeeId`,
+            `SystemName`,
+            `ExternalUserId`,
+            `ExternalUserName`,
+            `DeviceIdentifier`,
+            `Notes`,
+            `IsActive`
+        )
+        VALUES
+        (
+            p_EmployeeId,
+            p_SystemName,
+            p_ExternalUserId,
+            p_ExternalUserName,
+            p_DeviceIdentifier,
+            p_Notes,
+            COALESCE(p_IsActive, 1)
+        );
+
+        SET v_ExistingMappingId = LAST_INSERT_ID();
+    ELSE
+        UPDATE `EmployeeDeviceMappings`
+        SET `EmployeeId` = p_EmployeeId,
+            `ExternalUserName` = p_ExternalUserName,
+            `DeviceIdentifier` = p_DeviceIdentifier,
+            `Notes` = p_Notes,
+            `IsActive` = COALESCE(p_IsActive, `IsActive`)
+        WHERE `EmployeeDeviceMappingId` = v_ExistingMappingId;
+    END IF;
+
+    SELECT *
+    FROM `EmployeeDeviceMappings`
+    WHERE `EmployeeDeviceMappingId` = v_ExistingMappingId;
+END$$
+
+CREATE PROCEDURE `usp_ImportDevicePunch`(
+    IN p_SystemName VARCHAR(50),
+    IN p_DeviceIdentifier VARCHAR(200),
+    IN p_ExternalUserId VARCHAR(100),
+    IN p_ExternalUserName VARCHAR(200),
+    IN p_PunchTimestamp DATETIME(6),
+    IN p_PunchDirection VARCHAR(20),
+    IN p_RawPayloadJson LONGTEXT
+)
+BEGIN
+    DECLARE v_EmployeeId INT;
+    DECLARE v_DevicePunchImportId INT;
+    DECLARE v_OpenTimeEntryId INT;
+    DECLARE v_CreatedTimeEntryId INT;
+    DECLARE v_EventType VARCHAR(20);
+    DECLARE v_Notes VARCHAR(500);
+
+    IF EXISTS (
+        SELECT 1
+        FROM `DevicePunchImports`
+        WHERE `SystemName` = p_SystemName
+          AND `DeviceIdentifier` = p_DeviceIdentifier
+          AND `ExternalUserId` = p_ExternalUserId
+          AND `PunchTimestamp` = p_PunchTimestamp
+    ) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Duplicate device punch import.';
+    END IF;
+
+    SELECT `EmployeeId`
+      INTO v_EmployeeId
+    FROM `EmployeeDeviceMappings`
+    WHERE `SystemName` = p_SystemName
+      AND `ExternalUserId` = p_ExternalUserId
+      AND `IsActive` = 1
+    LIMIT 1;
+
+    INSERT INTO `DevicePunchImports`
+    (
+        `SystemName`,
+        `DeviceIdentifier`,
+        `ExternalUserId`,
+        `ExternalUserName`,
+        `PunchTimestamp`,
+        `PunchDirection`,
+        `ImportStatus`,
+        `FailureReason`,
+        `RawPayloadJson`,
+        `EmployeeId`
+    )
+    VALUES
+    (
+        p_SystemName,
+        p_DeviceIdentifier,
+        p_ExternalUserId,
+        p_ExternalUserName,
+        p_PunchTimestamp,
+        p_PunchDirection,
+        CASE WHEN v_EmployeeId IS NULL THEN 'Failed' ELSE 'Pending' END,
+        CASE WHEN v_EmployeeId IS NULL THEN 'No employee mapping found.' ELSE NULL END,
+        p_RawPayloadJson,
+        v_EmployeeId
+    );
+
+    SET v_DevicePunchImportId = LAST_INSERT_ID();
+
+    IF v_EmployeeId IS NULL THEN
+        SELECT *
+        FROM `DevicePunchImports`
+        WHERE `DevicePunchImportId` = v_DevicePunchImportId;
+    ELSE
+        SELECT `TimeEntryId`
+          INTO v_OpenTimeEntryId
+        FROM `TimeEntries`
+        WHERE `EmployeeId` = v_EmployeeId
+          AND `ClockOutTime` IS NULL
+        ORDER BY `ClockInTime` DESC, `TimeEntryId` DESC
+        LIMIT 1;
+
+        SET v_Notes = CONCAT('Imported from ', p_SystemName, ' (', p_DeviceIdentifier, ')');
+
+        IF v_OpenTimeEntryId IS NULL THEN
+            SET v_EventType = 'ClockIn';
+            INSERT INTO `TimeEntries`
+            (
+                `EmployeeId`,
+                `ClockInTime`,
+                `Notes`,
+                `EntrySource`,
+                `ClockMethod`
+            )
+            VALUES
+            (
+                v_EmployeeId,
+                p_PunchTimestamp,
+                v_Notes,
+                'Device',
+                p_SystemName
+            );
+            SET v_CreatedTimeEntryId = LAST_INSERT_ID();
+        ELSE
+            SET v_EventType = 'ClockOut';
+            UPDATE `TimeEntries`
+            SET `ClockOutTime` = p_PunchTimestamp,
+                `Notes` = COALESCE(`Notes`, v_Notes),
+                `EntrySource` = COALESCE(`EntrySource`, 'Device'),
+                `ClockMethod` = COALESCE(`ClockMethod`, p_SystemName)
+            WHERE `TimeEntryId` = v_OpenTimeEntryId;
+            SET v_CreatedTimeEntryId = v_OpenTimeEntryId;
+        END IF;
+
+        UPDATE `DevicePunchImports`
+        SET `ImportStatus` = 'Imported',
+            `FailureReason` = NULL,
+            `CreatedTimeEntryId` = v_CreatedTimeEntryId,
+            `PunchDirection` = COALESCE(p_PunchDirection, v_EventType)
+        WHERE `DevicePunchImportId` = v_DevicePunchImportId;
+
+        SELECT *
+        FROM `DevicePunchImports`
+        WHERE `DevicePunchImportId` = v_DevicePunchImportId;
+    END IF;
+END$$
+
 CREATE PROCEDURE `usp_GetBiWeeklyTimesheet`(
     IN p_EmployeeId INT,
     IN p_PeriodStartDate DATE
