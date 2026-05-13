@@ -560,6 +560,53 @@ def fetch_employee_import_lookup(cursor):
     return by_payroll_id, by_email, by_user_id
 
 
+def find_employee_by_payroll_id(cursor, payroll_id: str):
+    normalized_payroll_id = (payroll_id or "").strip()
+    if not normalized_payroll_id:
+        return None
+    cursor.execute(
+        """
+        SELECT
+            EmployeeId,
+            PayrollId,
+            FirstName,
+            LastName,
+            Email,
+            UserId
+        FROM dbo.Employees
+        WHERE PayrollId = ?
+        LIMIT 1
+        """,
+        normalized_payroll_id,
+    )
+    return cursor.fetchone()
+
+
+def overwrite_employee_payroll_id(cursor, employee_id: int, payroll_id: str):
+    normalized_payroll_id = (payroll_id or "").strip()
+    if not normalized_payroll_id:
+        return
+
+    existing_employee = find_employee_by_payroll_id(cursor, normalized_payroll_id)
+    if existing_employee is not None and existing_employee.EmployeeId != employee_id:
+        raise ValueError(
+            "Payroll ID "
+            f"{normalized_payroll_id} is already assigned to "
+            f"{existing_employee.FirstName} {existing_employee.LastName} "
+            f"(Employee {existing_employee.EmployeeId})."
+        )
+
+    cursor.execute(
+        """
+        UPDATE dbo.Employees
+        SET PayrollId = ?
+        WHERE EmployeeId = ?
+        """,
+        normalized_payroll_id,
+        employee_id,
+    )
+
+
 def find_employee_duplicate(cursor, email: str, user_id: str, exclude_employee_id: Optional[int] = None):
     conditions = []
     parameters = []
@@ -2508,6 +2555,9 @@ def owner_employees():
                             imported_count += 1
                             employees_by_payroll_id, employees_by_email, employees_by_user_id = fetch_employee_import_lookup(cursor)
                             matched_employee = employees_by_email.get(email) or employees_by_user_id.get(user_id)
+                            if matched_employee is not None and payroll_id_value and matched_employee.PayrollId != payroll_id_value:
+                                overwrite_employee_payroll_id(cursor, matched_employee.EmployeeId, payroll_id_value)
+                                matched_employee = fetch_employee_by_id(cursor, matched_employee.EmployeeId)
                             if matched_employee and row["is_active"]:
                                 matched_employee = canonicalize_existing_employee_identifiers(cursor, matched_employee.EmployeeId)
                                 if matched_employee is not None and (matched_employee.UserId or "").strip() != user_id:
@@ -2541,6 +2591,9 @@ def owner_employees():
                                 )
                         else:
                             matched_employee = canonicalize_existing_employee_identifiers(cursor, matched_employee.EmployeeId)
+                            if matched_employee is not None and payroll_id_value and matched_employee.PayrollId != payroll_id_value:
+                                overwrite_employee_payroll_id(cursor, matched_employee.EmployeeId, payroll_id_value)
+                                matched_employee = fetch_employee_by_id(cursor, matched_employee.EmployeeId)
                             is_active_value = (
                                 parse_csv_yes_no(row["is_active"], "IsActive")
                                 if row["is_active"]
