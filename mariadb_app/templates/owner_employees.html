@@ -138,6 +138,10 @@
                 <input type="text" value="Auto-generated from first and last name" readonly>
             </label>
             <label>
+                Payroll ID
+                <input type="text" name="payroll_id" required>
+            </label>
+            <label>
                 Funding Source
                 <select name="department_id" required>
                     <option value="">Select funding source</option>
@@ -180,8 +184,8 @@
 
     <article class="card wide-card">
         <h2>Import Employees From CSV</h2>
-        <p>Upload a UTF-8 CSV to create new employees and overwrite existing ones in one step. Existing employees are matched by <code>payroll_id</code> first, then <code>email</code>, then <code>user_id</code>. If a <code>payroll_id</code> does not already exist in the app database, the row is treated as a new employee and the database assigns the next payroll ID for that selected funding source using a 6-digit padded sequence. Each employee can be set to either <code>Annual Leave</code> or <code>Personal Leave</code>, not both. Imported rows always receive a one-time password setup link for first login.</p>
-        <p class="helper-text helper-text-left">Required columns: <code>first_name</code>, <code>last_name</code>, <code>email</code>, <code>personal_leave</code> or <code>leave_type</code>, <code>funding_id</code> or <code>funding_source</code>. Optional columns: <code>hire_date</code>, <code>payroll_id</code>, <code>user_id</code>, <code>role_name</code>, <code>workflow</code>, <code>is_active</code>. If <code>user_id</code> is blank, the app auto-generates it from first and last name. <code>temporary_password</code> is accepted for backward compatibility but ignored because the app now generates setup links automatically. Import also accepts the older <code>department_id</code>, <code>department_name</code>, and <code>reports_to_user_id</code> headers for compatibility.</p>
+        <p>Upload a UTF-8 CSV to create new employees and overwrite existing ones in one step. Existing employees are matched by <code>payroll_id</code> first, then <code>email</code>, then <code>user_id</code>. New imported employees must include the payroll ID you want stored in the database; the app no longer auto-generates one during import. Each employee can be set to either <code>Annual Leave</code> or <code>Personal Leave</code>, not both. Imported rows always receive a one-time password setup link for first login.</p>
+        <p class="helper-text helper-text-left">Required columns: <code>first_name</code>, <code>last_name</code>, <code>email</code>, <code>personal_leave</code> or <code>leave_type</code>, <code>funding_id</code> or <code>funding_source</code>. For brand-new employees, <code>payroll_id</code> is also required. Optional columns: <code>hire_date</code>, <code>user_id</code>, <code>role_name</code>, <code>workflow</code>, <code>is_active</code>. If <code>user_id</code> is blank, the app auto-generates it from first and last name. <code>temporary_password</code> is accepted for backward compatibility but ignored because the app now generates setup links automatically. Import also accepts the older <code>department_id</code>, <code>department_name</code>, and <code>reports_to_user_id</code> headers for compatibility.</p>
         <pre class="csv-example">Funding Id,FirstName,LastName,Email,RoleName,LeaveType,Workflow,HireDate,IsActive
 22,Jane,Doe,jane.doe@example.org,User,Annual,mary.manager,2026-04-15,Yes
 21,Pat,Owner,pat.owner@example.org,Owner,Personal,,2026-04-15,Yes</pre>
@@ -206,7 +210,7 @@
 
     <article class="card wide-card">
         <h2>Add Funding Source</h2>
-        <p>Funding sources drive the payroll ID prefix. New employees in a funding source get the next available 6-digit sequence after that funding source's current highest payroll number. If the Funding ID already exists, saving here will overwrite the current funding source name for that ID.</p>
+        <p>Funding sources are still used for employee organization and imports. If the Funding ID already exists, saving here will overwrite the current funding source name for that ID.</p>
         <form method="post" class="grid-form" data-track-changes="true" data-confirm-save-message="Are you sure you want to save this funding source? If the Funding ID already exists, the current database entry for that Funding ID will be overwritten.">
             <input type="hidden" name="action" value="add_department">
             <label>

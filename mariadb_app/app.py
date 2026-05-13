@@ -607,6 +607,13 @@ def overwrite_employee_payroll_id(cursor, employee_id: int, payroll_id: str):
     )
 
 
+def require_payroll_id_value(payroll_id: str, context_label: str = "Payroll ID") -> str:
+    normalized_payroll_id = (payroll_id or "").strip()
+    if not normalized_payroll_id:
+        raise ValueError(f"{context_label} is required.")
+    return normalized_payroll_id
+
+
 def find_employee_duplicate(cursor, email: str, user_id: str, exclude_employee_id: Optional[int] = None):
     conditions = []
     parameters = []
@@ -2367,6 +2374,7 @@ def owner_employees():
                 except ValueError as exc:
                     flash(str(exc), "error")
                     return redirect(url_for("owner_employees"))
+                payroll_id = require_payroll_id_value(request.form.get("payroll_id", ""))
                 user_id = normalize_user_id_input(user_id, first_name, last_name, email)
                 department_id = int(department_id_value)
                 existing_employee = find_employee_duplicate(cursor, email, user_id)
@@ -2386,6 +2394,7 @@ def owner_employees():
                     cursor.execute(
                         """
                         EXEC dbo.usp_CreateEmployee
+                            @PayrollId = ?,
                             @FirstName = ?,
                             @LastName = ?,
                             @Email = ?,
@@ -2398,6 +2407,7 @@ def owner_employees():
                             @PasswordSalt = ?,
                             @PasswordHash = ?
                         """,
+                        payroll_id,
                         first_name,
                         last_name,
                         email,
@@ -2417,6 +2427,16 @@ def owner_employees():
                     conn.commit()
                 except pyodbc.Error as exc:
                     conn.rollback()
+                    duplicate_payroll_employee = find_employee_by_payroll_id(cursor, payroll_id)
+                    if duplicate_payroll_employee is not None:
+                        flash(
+                            "Duplicate employee found. "
+                            f"{duplicate_payroll_employee.FirstName} {duplicate_payroll_employee.LastName} "
+                            f"(Employee {duplicate_payroll_employee.EmployeeId}, Payroll {duplicate_payroll_employee.PayrollId}) "
+                            "already uses that payroll ID.",
+                            "error",
+                        )
+                        return redirect(url_for("owner_employees"))
                     duplicate_employee = find_employee_duplicate(cursor, email, user_id)
                     if duplicate_employee is not None:
                         flash(
@@ -2524,9 +2544,14 @@ def owner_employees():
                         personal_leave_value = parse_csv_bool(row["personal_leave"])
 
                         if matched_employee is None:
+                            payroll_id_value = require_payroll_id_value(
+                                payroll_id_value,
+                                "Payroll ID is required for new imported employees",
+                            )
                             cursor.execute(
                                 """
                                 EXEC dbo.usp_CreateEmployee
+                                    @PayrollId = ?,
                                     @FirstName = ?,
                                     @LastName = ?,
                                     @Email = ?,
@@ -2539,6 +2564,7 @@ def owner_employees():
                                     @PasswordSalt = ?,
                                     @PasswordHash = ?
                                 """,
+                                payroll_id_value,
                                 first_name,
                                 last_name,
                                 email,
@@ -2554,10 +2580,7 @@ def owner_employees():
                             conn.commit()
                             imported_count += 1
                             employees_by_payroll_id, employees_by_email, employees_by_user_id = fetch_employee_import_lookup(cursor)
-                            matched_employee = employees_by_email.get(email) or employees_by_user_id.get(user_id)
-                            if matched_employee is not None and payroll_id_value and matched_employee.PayrollId != payroll_id_value:
-                                overwrite_employee_payroll_id(cursor, matched_employee.EmployeeId, payroll_id_value)
-                                matched_employee = fetch_employee_by_id(cursor, matched_employee.EmployeeId)
+                            matched_employee = employees_by_payroll_id.get(payroll_id_value) or employees_by_email.get(email) or employees_by_user_id.get(user_id)
                             if matched_employee and row["is_active"]:
                                 matched_employee = canonicalize_existing_employee_identifiers(cursor, matched_employee.EmployeeId)
                                 if matched_employee is not None and (matched_employee.UserId or "").strip() != user_id:

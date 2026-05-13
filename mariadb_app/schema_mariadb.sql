@@ -867,6 +867,7 @@ BEGIN
 END$$
 
 CREATE PROCEDURE `usp_CreateEmployee`(
+    IN p_PayrollId VARCHAR(8),
     IN p_FirstName VARCHAR(75),
     IN p_LastName VARCHAR(75),
     IN p_Email VARCHAR(255),
@@ -881,23 +882,15 @@ CREATE PROCEDURE `usp_CreateEmployee`(
 )
 BEGIN
     DECLARE v_RoleId INT;
-    DECLARE v_DepartmentPrefix VARCHAR(2);
-    DECLARE v_NextSequence INT;
-    DECLARE v_PayrollId VARCHAR(8);
 
     SELECT `RoleId` INTO v_RoleId FROM `Roles` WHERE `RoleName` = p_RoleName LIMIT 1;
     IF v_RoleId IS NULL THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invalid role name.';
     END IF;
 
-    SET v_DepartmentPrefix = RIGHT(CONCAT('0', CAST(p_DepartmentId AS CHAR)), 2);
-    SELECT IFNULL(MAX(CAST(RIGHT(`PayrollId`, 6) AS UNSIGNED)), 0) + 1
-      INTO v_NextSequence
-    FROM `Employees`
-    WHERE `DepartmentId` = p_DepartmentId
-      AND `PayrollId` LIKE CONCAT(v_DepartmentPrefix, '%');
-
-    SET v_PayrollId = CONCAT(v_DepartmentPrefix, LPAD(v_NextSequence, 6, '0'));
+    IF p_PayrollId IS NULL OR TRIM(p_PayrollId) = '' THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Payroll ID is required.';
+    END IF;
 
     INSERT INTO `Employees`
     (
@@ -906,11 +899,11 @@ BEGIN
     )
     VALUES
     (
-        v_PayrollId, p_DepartmentId, p_FirstName, p_LastName, p_Email, p_UserId, p_PersonalLeave, p_ReportsToUserId,
+        TRIM(p_PayrollId), p_DepartmentId, p_FirstName, p_LastName, p_Email, p_UserId, p_PersonalLeave, p_ReportsToUserId,
         p_PasswordSalt, p_PasswordHash, 1, v_RoleId, p_HireDate, 'Yes'
     );
 
-    SELECT LAST_INSERT_ID() AS `EmployeeId`, v_PayrollId AS `PayrollId`;
+    SELECT LAST_INSERT_ID() AS `EmployeeId`, TRIM(p_PayrollId) AS `PayrollId`;
 END$$
 
 CREATE PROCEDURE `usp_UpdateEmployee`(
