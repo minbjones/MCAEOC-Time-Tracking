@@ -303,6 +303,21 @@ def send_password_setup_email(recipient_email: str, recipient_name: str, setup_l
         server.send_message(message)
 
 
+def maybe_send_password_setup_email(recipient_email: str, recipient_name: str, setup_link: str):
+    if not invitations_enabled():
+        return "Password setup link was generated, but invitation emails are disabled."
+    if not smtp_email_is_configured():
+        return "Password setup link was generated, but SMTP is not configured."
+    if not (recipient_email or "").strip():
+        return "Password setup link was generated, but the employee does not have an email address."
+
+    try:
+        send_password_setup_email(recipient_email, recipient_name, setup_link)
+    except Exception as exc:
+        return f"Password setup link was generated, but the email could not be sent: {exc}"
+    return None
+
+
 def send_smtp_email(recipient_email: str, subject: str, body_lines: list[str]):
     settings = smtp_settings()
     if not smtp_email_is_configured():
@@ -2791,7 +2806,18 @@ def owner_employees():
                             "setup_link": setup_link or "",
                         }
                     ]
+                email_warning = None
+                if setup_link:
+                    email_warning = maybe_send_password_setup_email(
+                        email,
+                        f"{first_name} {last_name}".strip(),
+                        setup_link,
+                    )
                 flash("Employee created. A one-time password setup link was generated for first login.", "success")
+                if email_warning:
+                    flash(email_warning, "info")
+                else:
+                    flash("Password setup email sent to the employee.", "success")
                 return redirect(url_for("owner_employees"))
             elif action == "import_csv":
                 if viewer_role != "Owner":
@@ -2817,6 +2843,8 @@ def owner_employees():
                 error_messages = []
                 generated_setup_links = []
                 payroll_id_mappings = []
+                emailed_setup_links = 0
+                setup_link_email_warnings = []
 
                 for row in import_rows:
                     try:
@@ -2989,6 +3017,17 @@ def owner_employees():
                                     "setup_link": setup_link,
                                 }
                             )
+                            email_warning = maybe_send_password_setup_email(
+                                email,
+                                f"{first_name} {last_name}".strip(),
+                                setup_link,
+                            )
+                            if email_warning:
+                                setup_link_email_warnings.append(
+                                    f"Line {row['line_number']}: {email_warning}"
+                                )
+                            else:
+                                emailed_setup_links += 1
                         if matched_employee is not None:
                             payroll_id_mappings.append(
                                 {
@@ -3022,6 +3061,16 @@ def owner_employees():
                         f"Generated one-time password setup links for {len(generated_setup_links)} employee(s). Save them now because they are only shown once.",
                         "info",
                     )
+                if emailed_setup_links:
+                    flash(
+                        f"Emailed password setup links for {emailed_setup_links} employee(s).",
+                        "success",
+                    )
+                if setup_link_email_warnings:
+                    preview = " | ".join(setup_link_email_warnings[:5])
+                    if len(setup_link_email_warnings) > 5:
+                        preview += f" | ...and {len(setup_link_email_warnings) - 5} more"
+                    flash(preview, "info")
                 if payroll_id_mappings:
                     session["import_payroll_id_mappings"] = payroll_id_mappings
                     flash(
@@ -3069,7 +3118,16 @@ def owner_employees():
                         "setup_link": setup_link,
                     }
                 ]
+                email_warning = maybe_send_password_setup_email(
+                    request.form.get("employee_email", "").strip(),
+                    request.form.get("employee_name", "").strip(),
+                    setup_link,
+                )
                 flash("Password reset. A one-time password setup link was generated for the employee.", "success")
+                if email_warning:
+                    flash(email_warning, "info")
+                else:
+                    flash("Password setup email sent to the employee.", "success")
                 return redirect(url_for("owner_employees", employee_id=employee_id))
             elif action == "make_inactive":
                 if viewer_role != "Owner":
