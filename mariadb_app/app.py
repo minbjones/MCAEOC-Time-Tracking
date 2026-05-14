@@ -2221,7 +2221,13 @@ def request_leave():
         if created_leave_request:
             leave_request = get_leave_request_email_context(cursor, created_leave_request.LeaveRequestId)
 
-    flash("Leave request submitted.", "success")
+    supervisor_name = ""
+    if leave_request is not None:
+        supervisor_name = (getattr(leave_request, "SupervisorName", None) or "").strip()
+    if supervisor_name:
+        flash(f"Leave request submitted to {supervisor_name}.", "success")
+    else:
+        flash("Leave request submitted.", "success")
     email_warning = notify_supervisor_of_leave_request(leave_request)
     if email_warning:
         flash(email_warning, "info")
