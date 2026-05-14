@@ -505,6 +505,52 @@ td a:hover,
     margin: 0;
 }
 
+.timesheet-card {
+    background: #fffdf9;
+}
+
+.timesheet-table {
+    margin-top: 0.4rem;
+    border: 1px solid #d9cdbd;
+    border-radius: 0;
+    background: #fff;
+}
+
+.timesheet-table thead th {
+    background: #e7f8f5;
+    color: #1f2933;
+    font-weight: 700;
+}
+
+.timesheet-table tfoot th {
+    border-top: 1px solid #1f2933;
+}
+
+.timesheet-signatures {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    margin-top: 2rem;
+    align-items: end;
+}
+
+.timesheet-signature-block p {
+    margin: 0 0 0.35rem;
+}
+
+.timesheet-signature-line {
+    width: 100%;
+    border-bottom: 2px solid #1f2933;
+    height: 1.5rem;
+    margin-bottom: 0.7rem;
+}
+
+.timesheet-date-line {
+    width: 9rem;
+    border-bottom: 2px solid #1f2933;
+    height: 1.2rem;
+}
+
 .inline-form label,
 .grid-form label,
 .stack-form label {
@@ -613,5 +659,27 @@ hr {
         box-shadow: none;
         padding: 0;
         background: #fff;
+    }
+
+    .timesheet-card {
+        color: #000;
+    }
+
+    .timesheet-meta {
+        background: #fff;
+        border: 1px solid #d9cdbd;
+        border-radius: 0;
+        padding: 0.55rem 0.7rem;
+        gap: 0.35rem 0.7rem;
+    }
+
+    .timesheet-table {
+        border-radius: 0;
+        background: #fff;
+    }
+
+    .timesheet-signatures {
+        gap: 1.5rem;
+        margin-top: 1.75rem;
     }
 }

@@ -1,3 +1,0 @@
-Employee Id,FirstName,LastName,Email,User Id,Payroll Id,Funding Id,Funding Source,RoleName,PersonalLeave,Workflow,HireDate,IsActive
-2,Big,Dummy,bd@mcaeoc.org,bd@mcaeoc.org,22000001,22,Head Start,User,Yes,admin,2026-05-12,Yes
-1,Admin,User,admin@mcaeoc.org,admin,99000001,99,FINANCE,Owner,No,,2015-07-01,Yes

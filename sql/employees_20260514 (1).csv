@@ -1,4 +1,0 @@
-Employee Id,FirstName,LastName,Email,User Id,Payroll Id,Funding Id,Funding Source,RoleName,PersonalLeave,Workflow,HireDate,IsActive
-13,Priscilla,Johnson,cilla.johnson@mcaeoc.org,priscillajohnson,990003,99,Admin Cost,Executive Director,No,,1993-01-01,Yes
-12,BLANTON,JONES,blanton.jones@mcaeoc.org,blanton.jones,220126,22,Head Start,Director,No,priscillajohnson,2014-06-14,Yes
-1,Admin,User,admin@mcaeoc.org,admin,99000001,99,Admin Cost,Owner,No,,2026-05-14,Yes
