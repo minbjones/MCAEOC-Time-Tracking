@@ -39,6 +39,7 @@
             <p><strong>Employee Name:</strong> {{ summary.full_name }}</p>
             <p><strong>Employee ID:</strong> {{ summary.employee_id }}</p>
             <p><strong>Pay Period:</strong> {{ period_start|datefmt }} - {{ period_end|datefmt }}</p>
+            <p><strong>Printed On:</strong> {{ now|datetime12 }}</p>
             <p><strong>Sick Leave Available:</strong> {{ "%.2f"|format(summary.sick_leave_hours) }}</p>
             <p><strong>Annual Leave Available:</strong> {{ "%.2f"|format(summary.annual_leave_hours) }}</p>
             {% if summary.is_head_start %}
@@ -84,5 +85,19 @@
             </tr>
         </tfoot>
     </table>
+    <div class="timesheet-signatures">
+        <div class="timesheet-signature-block">
+            <p><strong>Employee Signature</strong></p>
+            <p>______________________________</p>
+            <p><strong>Date</strong></p>
+            <p>________________</p>
+        </div>
+        <div class="timesheet-signature-block">
+            <p><strong>Supervisor Signature</strong></p>
+            <p>______________________________</p>
+            <p><strong>Date</strong></p>
+            <p>________________</p>
+        </div>
+    </div>
 </section>
 {% endblock %}

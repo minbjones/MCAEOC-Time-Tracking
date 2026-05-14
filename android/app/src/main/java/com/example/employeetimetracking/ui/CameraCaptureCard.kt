@@ -165,20 +165,19 @@ fun CameraCaptureCard(
                 )
 
                 Canvas(modifier = Modifier.fillMaxSize()) {
-                    val strokeWidth = 2.dp.toPx()
-                    val boxWidth = size.width * 0.5f
-                    val boxHeight = size.height * 0.2f
-                    val left = (size.width - boxWidth) / 2
-                    val top = size.height * 0.35f
+                    val strokeWidth = 3.dp.toPx()
+                    val ovalWidth = size.width * 0.45f
+                    val ovalHeight = size.height * 0.75f
+                    val left = (size.width - ovalWidth) / 2
+                    val top = (size.height - ovalHeight) / 2
 
-                    drawRoundRect(
-                        color = Color.White.copy(alpha = 0.8f),
+                    drawOval(
+                        color = Color.White.copy(alpha = 0.7f),
                         topLeft = Offset(left, top),
-                        size = Size(boxWidth, boxHeight),
-                        cornerRadius = CornerRadius(8.dp.toPx()),
+                        size = Size(ovalWidth, ovalHeight),
                         style = Stroke(
                             width = strokeWidth,
-                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(20f, 10f), 0f)
+                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(30f, 15f), 0f)
                         )
                     )
                 }

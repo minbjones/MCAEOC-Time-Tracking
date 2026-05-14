@@ -2093,6 +2093,7 @@ def timesheet():
         next_period_start = None
 
     summary = fetch_user_summary(target_employee_id)
+    printed_on = datetime.now()
     available_periods = build_available_timesheet_periods(summary.get("hire_date"), current_period_start)
     with get_connection() as conn:
         ensure_timesheet_admin_schema(conn)
@@ -2112,6 +2113,7 @@ def timesheet():
         next_period_start=next_period_start,
         current_period_start=current_period_start,
         available_periods=available_periods,
+        now=printed_on,
     )
 
 
@@ -2193,6 +2195,7 @@ def export_timesheet_pdf():
     period_end = period_start + timedelta(days=13)
 
     summary = fetch_user_summary(target_employee_id)
+    printed_on = datetime.now()
 
     with get_connection() as conn:
         ensure_timesheet_admin_schema(conn)
@@ -2276,6 +2279,8 @@ def export_timesheet_pdf():
     )
     story.append(meta_table)
     story.append(Spacer(1, 0.18 * inch))
+    story.append(Paragraph(f"<b>Printed On:</b> {format_datetime_12h(printed_on)}", meta_style))
+    story.append(Spacer(1, 0.18 * inch))
 
     table_data = [["Date", "Clock In", "Clock Out", "Hours", "Notes / Source"]]
     for row in rows:
@@ -2324,6 +2329,30 @@ def export_timesheet_pdf():
         )
     timesheet_table.setStyle(TableStyle(table_style))
     story.append(timesheet_table)
+    story.append(Spacer(1, 0.4 * inch))
+
+    signature_table = Table(
+        [
+            ["Employee Signature", "Date", "Supervisor Signature", "Date"],
+            ["______________________________", "________________", "______________________________", "________________"],
+        ],
+        colWidths=[2.55 * inch, 1.0 * inch, 2.55 * inch, 1.0 * inch],
+        hAlign="LEFT",
+    )
+    signature_table.setStyle(
+        TableStyle(
+            [
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTNAME", (0, 1), (-1, 1), "Helvetica"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 12),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ("VALIGN", (0, 0), (-1, -1), "BOTTOM"),
+            ]
+        )
+    )
+    story.append(signature_table)
 
     doc.build(story)
     buffer.seek(0)
