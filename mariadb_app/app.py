@@ -2337,10 +2337,10 @@ def export_timesheet_pdf():
 
     signature_table = Table(
         [
-            ["Employee Signature", "Date", "Supervisor Signature", "Date"],
-            ["______________________________", "________________", "______________________________", "________________"],
+            ["Employee Signature", "Date", "", "Supervisor Signature", "Date"],
+            ["______________________________", "________________", "", "______________________________", "________________"],
         ],
-        colWidths=[2.55 * inch, 1.0 * inch, 2.55 * inch, 1.0 * inch],
+        colWidths=[2.3 * inch, 0.95 * inch, 0.45 * inch, 2.3 * inch, 0.95 * inch],
         hAlign="LEFT",
     )
     signature_table.setStyle(
