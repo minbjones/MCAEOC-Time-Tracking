@@ -37,7 +37,7 @@
         <p class="timesheet-title">Employee Timesheet</p>
         <div class="timesheet-meta">
             <p><strong>Employee Name:</strong> {{ summary.full_name }}</p>
-            <p><strong>Employee ID:</strong> {{ summary.employee_id }}</p>
+            <p><strong>Payroll ID:</strong> {{ summary.payroll_id }}</p>
             <p><strong>Pay Period:</strong> {{ period_start|datefmt }} - {{ period_end|datefmt }}</p>
             <p><strong>Printed On:</strong> {{ now|datetime12 }}</p>
             <p><strong>Sick Leave Available:</strong> {{ "%.2f"|format(summary.sick_leave_hours) }}</p>
@@ -65,7 +65,7 @@
                 <td>{{ row.ClockInTime|time12 }}</td>
                 <td>{{ format_clock_boundary(row.ClockInTime, row.ClockOutTime) }}</td>
                 <td>{{ row.WorkedHours }}</td>
-                <td>{{ row.Notes or row.EntrySource }}</td>
+                <td class="timesheet-notes-cell">{{ row.Notes or row.EntrySource }}</td>
                 {% if can_edit_times %}
                 <td class="no-print"><a class="button-link" href="{{ url_for('edit_time_entry', time_entry_id=row.TimeEntryId) }}">Edit</a></td>
                 {% endif %}

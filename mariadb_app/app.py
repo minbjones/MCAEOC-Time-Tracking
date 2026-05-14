@@ -2248,7 +2248,7 @@ def export_timesheet_pdf():
     meta_data = [
         [
             Paragraph(f"<b>Employee Name:</b> {summary['full_name']}", meta_style),
-            Paragraph(f"<b>Employee ID:</b> {summary['employee_id']}", meta_style),
+            Paragraph(f"<b>Payroll ID:</b> {summary['payroll_id']}", meta_style),
         ],
         [
             Paragraph(
@@ -2299,7 +2299,7 @@ def export_timesheet_pdf():
 
     timesheet_table = Table(
         table_data,
-        colWidths=[1.15 * inch, 1.1 * inch, 1.75 * inch, 0.8 * inch, 2.15 * inch],
+        colWidths=[1.0 * inch, 0.95 * inch, 1.45 * inch, 0.6 * inch, 3.0 * inch],
         repeatRows=1,
         hAlign="LEFT",
     )
@@ -2312,10 +2312,14 @@ def export_timesheet_pdf():
         ("GRID", (0, 0), (-1, -1), 0.6, colors.HexColor("#D9CDBD")),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("ALIGN", (3, 1), (3, -1), "RIGHT"),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("LEADING", (0, 0), (-1, -1), 10),
         ("LEFTPADDING", (0, 0), (-1, -1), 6),
         ("RIGHTPADDING", (0, 0), (-1, -1), 6),
         ("TOPPADDING", (0, 0), (-1, -1), 7),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+        ("VALIGN", (4, 1), (4, last_row_index - 1), "TOP"),
+        ("WORDWRAP", (4, 1), (4, last_row_index - 1), "CJK"),
         ("FONTNAME", (0, last_row_index), (0, last_row_index), "Helvetica-Bold"),
         ("FONTNAME", (3, last_row_index), (3, last_row_index), "Helvetica-Bold"),
         ("LINEABOVE", (0, last_row_index), (-1, last_row_index), 1, colors.HexColor("#1F2933")),

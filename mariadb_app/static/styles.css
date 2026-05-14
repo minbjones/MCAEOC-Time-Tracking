@@ -514,12 +514,27 @@ td a:hover,
     border: 1px solid #d9cdbd;
     border-radius: 0;
     background: #fff;
+    table-layout: auto;
+    font-size: 0.75rem;
 }
 
 .timesheet-table thead th {
     background: #e7f8f5;
     color: #1f2933;
     font-weight: 700;
+}
+
+.timesheet-table th,
+.timesheet-table td {
+    font-size: 0.75rem;
+    line-height: 1.2;
+    vertical-align: top;
+}
+
+.timesheet-notes-cell {
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
 }
 
 .timesheet-table tfoot th {
