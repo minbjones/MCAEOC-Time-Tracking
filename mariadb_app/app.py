@@ -236,9 +236,13 @@ def smtp_settings() -> dict:
     }
 
 
-def password_reset_email_is_configured() -> bool:
+def smtp_email_is_configured() -> bool:
     settings = smtp_settings()
     return bool(settings["host"] and settings["from_email"])
+
+
+def password_reset_email_is_configured() -> bool:
+    return smtp_email_is_configured()
 
 
 def invitations_enabled() -> bool:
@@ -247,7 +251,7 @@ def invitations_enabled() -> bool:
 
 def send_password_setup_email(recipient_email: str, recipient_name: str, setup_link: str):
     settings = smtp_settings()
-    if not password_reset_email_is_configured():
+    if not smtp_email_is_configured():
         raise RuntimeError(
             "Password setup email is not configured. Set SMTP_HOST and SMTP_FROM_EMAIL first."
         )
@@ -297,6 +301,151 @@ def send_password_setup_email(recipient_email: str, recipient_name: str, setup_l
         if username:
             server.login(username, password or "")
         server.send_message(message)
+
+
+def send_smtp_email(recipient_email: str, subject: str, body_lines: list[str]):
+    settings = smtp_settings()
+    if not smtp_email_is_configured():
+        raise RuntimeError("SMTP email is not configured. Set SMTP_HOST and SMTP_FROM_EMAIL first.")
+
+    message = EmailMessage()
+    message["Subject"] = subject
+    message["From"] = (
+        f"{settings['from_name']} <{settings['from_email']}>"
+        if settings["from_name"]
+        else settings["from_email"]
+    )
+    message["To"] = recipient_email
+    message.set_content("\n".join(body_lines))
+
+    username = settings["username"] or None
+    password = settings["password"] or None
+
+    if settings["use_ssl"]:
+        with smtplib.SMTP_SSL(
+            settings["host"],
+            settings["port"],
+            context=ssl.create_default_context(),
+        ) as server:
+            if username:
+                server.login(username, password or "")
+            server.send_message(message)
+        return
+
+    with smtplib.SMTP(settings["host"], settings["port"]) as server:
+        if settings["use_tls"]:
+            server.starttls(context=ssl.create_default_context())
+        if username:
+            server.login(username, password or "")
+        server.send_message(message)
+
+
+def format_leave_request_date_range(start_date, end_date) -> str:
+    start_text = format_date_mmddyyyy(start_date)
+    end_text = format_date_mmddyyyy(end_date)
+    if not start_text:
+        return ""
+    if not end_text or start_text == end_text:
+        return start_text
+    return f"{start_text} to {end_text}"
+
+
+def get_leave_request_email_context(cursor, leave_request_id: int):
+    cursor.execute(
+        """
+        SELECT
+            LR.LeaveRequestId,
+            LR.LeaveType,
+            LR.StartDate,
+            LR.EndDate,
+            LR.RequestedHours,
+            LR.Notes,
+            LR.ApprovalStatus,
+            E.EmployeeId AS RequestorEmployeeId,
+            E.PayrollId AS RequestorPayrollId,
+            LTRIM(RTRIM(CONCAT(E.FirstName, ' ', E.LastName))) AS RequestorName,
+            E.Email AS RequestorEmail,
+            E.ReportsToUserId,
+            S.EmployeeId AS SupervisorEmployeeId,
+            LTRIM(RTRIM(CONCAT(S.FirstName, ' ', S.LastName))) AS SupervisorName,
+            S.Email AS SupervisorEmail
+        FROM dbo.LeaveRequests LR
+        INNER JOIN dbo.Employees E ON E.EmployeeId = LR.EmployeeId
+        LEFT JOIN dbo.Employees S ON S.UserId = E.ReportsToUserId
+        WHERE LR.LeaveRequestId = ?
+        """,
+        leave_request_id,
+    )
+    return cursor.fetchone()
+
+
+def notify_supervisor_of_leave_request(leave_request):
+    if leave_request is None:
+        return "Leave request saved, but the supervisor email details could not be loaded."
+    if not smtp_email_is_configured():
+        return "Leave request saved, but SMTP is not configured, so no supervisor email was sent."
+    if not (leave_request.SupervisorEmail or "").strip():
+        return "Leave request saved, but the employee does not have a supervisor email on file."
+
+    requestor_name = leave_request.RequestorName or "Employee"
+    supervisor_name = leave_request.SupervisorName or "Supervisor"
+    date_range = format_leave_request_date_range(leave_request.StartDate, leave_request.EndDate)
+    requested_hours = float(leave_request.RequestedHours or 0)
+    notes = (leave_request.Notes or "").strip()
+    try:
+        send_smtp_email(
+            leave_request.SupervisorEmail,
+            f"Leave request submitted by {requestor_name}",
+            [
+                f"Hello {supervisor_name},",
+                "",
+                f"{requestor_name} (Payroll ID: {leave_request.RequestorPayrollId}) submitted a leave request.",
+                f"Leave type: {leave_request.LeaveType}",
+                f"Dates: {date_range}",
+                f"Requested hours: {requested_hours:g}",
+                f"Notes: {notes or 'None'}",
+                "",
+                "Please review the request in MCAEOC Employee Time Tracking.",
+            ],
+        )
+    except Exception as exc:
+        return f"Leave request saved, but the supervisor email could not be sent: {exc}"
+    return None
+
+
+def notify_requestor_of_leave_decision(leave_request, approver_name: str):
+    if leave_request is None:
+        return "Leave request was updated, but the requestor email details could not be loaded."
+    if not smtp_email_is_configured():
+        return "Leave request was updated, but SMTP is not configured, so no requestor email was sent."
+    if not (leave_request.RequestorEmail or "").strip():
+        return "Leave request was updated, but the requestor does not have an email on file."
+
+    requestor_name = leave_request.RequestorName or "Employee"
+    approval_status = leave_request.ApprovalStatus or "Updated"
+    date_range = format_leave_request_date_range(leave_request.StartDate, leave_request.EndDate)
+    requested_hours = float(leave_request.RequestedHours or 0)
+    notes = (leave_request.Notes or "").strip()
+    try:
+        send_smtp_email(
+            leave_request.RequestorEmail,
+            f"Your leave request was {approval_status.lower()}",
+            [
+                f"Hello {requestor_name},",
+                "",
+                f"Your leave request has been {approval_status.lower()}.",
+                f"Leave type: {leave_request.LeaveType}",
+                f"Dates: {date_range}",
+                f"Requested hours: {requested_hours:g}",
+                f"Notes: {notes or 'None'}",
+                f"Processed by: {approver_name or 'Supervisor'}",
+                "",
+                "You can review the request in MCAEOC Employee Time Tracking.",
+            ],
+        )
+    except Exception as exc:
+        return f"Leave request was updated, but the requestor email could not be sent: {exc}"
+    return None
 
 
 def ensure_password_setup_schema(conn):
@@ -2021,6 +2170,7 @@ def request_leave():
     end_date = request.form["end_date"]
     requested_hours = request.form["requested_hours"]
     notes = request.form.get("notes", "").strip()
+    leave_request = None
 
     with get_connection() as conn:
         ensure_role_catalog(conn)
@@ -2043,8 +2193,23 @@ def request_leave():
             notes or None,
         )
         conn.commit()
+        cursor.execute(
+            """
+            SELECT TOP 1 LeaveRequestId
+            FROM dbo.LeaveRequests
+            WHERE EmployeeId = ?
+            ORDER BY LeaveRequestId DESC
+            """,
+            session["user"]["employee_id"],
+        )
+        created_leave_request = cursor.fetchone()
+        if created_leave_request:
+            leave_request = get_leave_request_email_context(cursor, created_leave_request.LeaveRequestId)
 
     flash("Leave request submitted.", "success")
+    email_warning = notify_supervisor_of_leave_request(leave_request)
+    if email_warning:
+        flash(email_warning, "info")
     return redirect(url_for("dashboard"))
 
 
@@ -3395,6 +3560,7 @@ def process_leave_request(leave_request_id: int):
     approval_status = "Approved" if action == "approve" else "Denied"
     viewer_id = current_employee_id()
     viewer_role = current_role_name()
+    leave_request = None
 
     with get_connection() as conn:
         ensure_role_catalog(conn)
@@ -3440,8 +3606,12 @@ def process_leave_request(leave_request_id: int):
             session["user"]["employee_id"],
         )
         conn.commit()
+        leave_request = get_leave_request_email_context(cursor, leave_request_id)
 
     flash(f"Leave request {approval_status.lower()}.", "success")
+    email_warning = notify_requestor_of_leave_decision(leave_request, session["user"]["full_name"])
+    if email_warning:
+        flash(email_warning, "info")
     return redirect(url_for("admin_dashboard"))
 
 

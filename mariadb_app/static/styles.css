@@ -515,7 +515,7 @@ td a:hover,
     border-radius: 0;
     background: #fff;
     table-layout: auto;
-    font-size: 0.75rem;
+    font-size: 0.82rem;
 }
 
 .timesheet-table thead th {
@@ -526,7 +526,7 @@ td a:hover,
 
 .timesheet-table th,
 .timesheet-table td {
-    font-size: 0.75rem;
+    font-size: 0.82rem;
     line-height: 1.2;
     vertical-align: top;
 }
@@ -691,6 +691,12 @@ hr {
     .timesheet-table {
         border-radius: 0;
         background: #fff;
+        font-size: 0.75rem;
+    }
+
+    .timesheet-table th,
+    .timesheet-table td {
+        font-size: 0.75rem;
     }
 
     .timesheet-signatures {

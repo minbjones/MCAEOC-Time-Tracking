@@ -1,0 +1,4 @@
+Employee Id,FirstName,LastName,Email,User Id,Payroll Id,Funding Id,Funding Source,RoleName,PersonalLeave,Workflow,HireDate,IsActive
+1,Admin,User,admin@mcaeoc.org,admin,99000001,99,Admin Cost,Owner,No,,,Yes
+,BLANTON,JONES,blanton.jones@mcaeoc.org,BLANTON JONES,220126,22,,Director,No,,6/14/2014,Yes
+,Priscilla,Johnson,cilla.johnson@mcaeoc.org,Priscilla Johnson,990003,99,,Executive Director,No,,1/1/1993,Yes
