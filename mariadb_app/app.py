@@ -3630,7 +3630,6 @@ def manual_leave_entry():
 def process_leave_request(leave_request_id: int):
     action = request.form["action"]
     approval_status = "Approved" if action == "approve" else "Denied"
-    viewer_id = current_employee_id()
     viewer_role = current_role_name()
     leave_request = None
     notification_message = None
@@ -3667,18 +3666,23 @@ def process_leave_request(leave_request_id: int):
                 flash("You do not have access to that leave request.", "error")
                 return redirect(url_for("admin_dashboard"))
 
-        cursor.execute(
-            """
-            EXEC dbo.usp_ProcessLeaveRequest
-                @LeaveRequestId = ?,
-                @ApprovalStatus = ?,
-                @ApprovedByEmployeeId = ?
-            """,
-            leave_request_id,
-            approval_status,
-            session["user"]["employee_id"],
-        )
-        conn.commit()
+        try:
+            cursor.execute(
+                """
+                EXEC dbo.usp_ProcessLeaveRequest
+                    @LeaveRequestId = ?,
+                    @ApprovalStatus = ?,
+                    @ApprovedByEmployeeId = ?
+                """,
+                leave_request_id,
+                approval_status,
+                session["user"]["employee_id"],
+            )
+            conn.commit()
+        except pyodbc.Error as exc:
+            conn.rollback()
+            flash(str(exc).strip() or f"Could not {approval_status.lower()} leave request.", "error")
+            return redirect(url_for("admin_dashboard"))
         try:
             leave_request = get_leave_request_email_context(cursor, leave_request_id)
         except Exception as exc:
