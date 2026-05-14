@@ -460,24 +460,6 @@ td a:hover,
     text-align: center;
 }
 
-.timesheet-brand {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.7rem;
-}
-
-.timesheet-brand-copy {
-    text-align: center;
-}
-
-.timesheet-brand-logo {
-    width: 42px;
-    height: 42px;
-    object-fit: contain;
-    flex: 0 0 auto;
-}
-
 .timesheet-actions {
     display: flex;
     justify-content: flex-end;
