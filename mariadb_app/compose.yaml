@@ -55,22 +55,5 @@ services:
     ports:
       - "8001:8000"
 
-  zkteco_adms:
-    build:
-      context: .
-      dockerfile: zkteco_adms/Dockerfile
-    container_name: mcaeoc_zkteco_adms
-    restart: unless-stopped
-    depends_on:
-      - mariadb
-    environment:
-      EMPLOYEE_TIME_TRACKING_CONNECTION_STRING: SERVER=mariadb;DATABASE=dbo;UID=mcaeoc;PWD=1400Monster1!;PORT=3306;
-      ZKTECO_ADMS_SYSTEM_NAME: ZKTecoIFace702
-      ZKTECO_ADMS_DEVICE_IDENTIFIER: iface702
-      ZKTECO_ADMS_SAVE_RAW_PAYLOADS: "true"
-      ZKTECO_ADMS_RAW_PAYLOAD_MAX_LENGTH: 20000
-    ports:
-      - "8088:8000"
-
 volumes:
   mariadb_data:

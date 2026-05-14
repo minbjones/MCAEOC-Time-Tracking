@@ -8,7 +8,6 @@ This folder is a separate MariaDB test copy of the Flask app so your main SQL Se
 - Docker files for containerized deployment
 - a MariaDB schema/bootstrap script
 - a FastAPI mobile API for Android
-- a FastAPI ADMS receiver for ZKTeco devices
 
 ## What this variant is for
 
@@ -29,23 +28,6 @@ Use `compose.yaml` in this folder.
 3. Wait for the containers to finish booting.
 4. Open `http://<nas-ip>:8000` for the web app.
 5. The Android/mobile API is available at `http://<nas-ip>:8001`.
-6. The ZKTeco ADMS receiver is available at `http://<nas-ip>:8088`.
-
-## ZKTeco ADMS receiver
-
-The ADMS receiver lives in `zkteco_adms` and is meant for devices like the iFace702.
-
-- health: `http://<nas-ip>:8088/health`
-- device endpoint: `http://<nas-ip>:8088/iclock/cdata`
-- device poll stub: `http://<nas-ip>:8088/iclock/getrequest`
-
-Before device punches can import fully, make sure the MariaDB database has:
-
-- `EmployeeDeviceMappings`
-- `DevicePunchImports`
-- `usp_ImportDevicePunch`
-
-The receiver also creates a lightweight `AdmsRequestLogs` table automatically so you can inspect raw ADMS requests while tuning the device connection.
 
 If you only want to upload a compose file and pull prebuilt images, use:
 

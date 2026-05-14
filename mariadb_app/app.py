@@ -1633,6 +1633,12 @@ def get_biweekly_period(anchor: Optional[date] = None):
     return start, end
 
 
+def parse_selected_period_start(period_start_value: Optional[str]) -> Optional[date]:
+    if not period_start_value:
+        return None
+    return datetime.strptime(period_start_value, "%Y-%m-%d").date()
+
+
 def build_available_timesheet_periods(hire_date: Optional[date], current_period_start: date) -> list[dict]:
     first_available_start = current_period_start
     if hire_date:
@@ -2076,8 +2082,8 @@ def timesheet():
 
     period_start_arg = request.args.get("period_start")
     if period_start_arg:
-        requested_date = datetime.strptime(period_start_arg, "%Y-%m-%d").date()
-        period_start, period_end = get_biweekly_period(requested_date)
+        period_start = parse_selected_period_start(period_start_arg)
+        period_end = period_start + timedelta(days=13)
     else:
         period_start, period_end = get_biweekly_period()
     current_period_start, _ = get_biweekly_period()
@@ -2122,8 +2128,7 @@ def print_timesheet():
 
     period_start_arg = request.args.get("period_start")
     if period_start_arg:
-        requested_date = datetime.strptime(period_start_arg, "%Y-%m-%d").date()
-        period_start, _ = get_biweekly_period(requested_date)
+        period_start = parse_selected_period_start(period_start_arg)
     else:
         period_start, _ = get_biweekly_period()
 
@@ -2182,8 +2187,7 @@ def export_timesheet_pdf():
 
     period_start_arg = request.args.get("period_start")
     if period_start_arg:
-        requested_date = datetime.strptime(period_start_arg, "%Y-%m-%d").date()
-        period_start, _ = get_biweekly_period(requested_date)
+        period_start = parse_selected_period_start(period_start_arg)
     else:
         period_start, _ = get_biweekly_period()
     period_end = period_start + timedelta(days=13)
