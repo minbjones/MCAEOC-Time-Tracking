@@ -37,13 +37,15 @@ _connection_target_logged = False
 _password_setup_schema_ready = False
 PAY_PERIOD_END_ANCHOR = date(2026, 4, 24)
 
-LEAVE_APPROVER_ROLES = {"Owner", "Executive Director", "Director", "Manager"}
+LEAVE_APPROVER_ROLES = {"Owner", "Executive Director", "Director", "Manager", "Leave Manager"}
 MANUAL_LEAVE_ENTRY_ROLES = {"Owner", "Leave Manager"}
 TIMESHEET_REVIEW_ROLES = {"Owner", "Executive Director", "Director", "Manager"}
 TIME_EDIT_ROLES = {"Owner", "Executive Director", "Director", "Manager"}
 SUPERVISOR_ROLES = {"Owner", "Executive Director", "Director", "Manager"}
 CLOCK_MANAGEMENT_ROLES = {"Owner", "Executive Director", "Director"}
 CLOCK_SELF_ROLES = {"Owner", "Executive Director", "Director"}
+BALANCE_TRACKED_LEAVE_TYPES = {"Annual", "Sick", "Personal"}
+STANDARD_LEAVE_TYPES = ("Sick", "Holiday", "Inclement Weather", "Training", "Bereavement")
 
 
 def format_datetime_12h(value):
@@ -76,6 +78,15 @@ app.jinja_env.filters["datefmt"] = format_date_mmddyyyy
 app.jinja_env.filters["datetime12"] = format_datetime_12h
 app.jinja_env.filters["time12"] = format_time_12h
 app.jinja_env.globals["format_clock_boundary"] = format_clock_boundary
+
+
+def get_leave_type_options(is_head_start: bool):
+    primary_type = "Personal" if is_head_start else "Annual"
+    return (primary_type, *STANDARD_LEAVE_TYPES)
+
+
+def is_balance_tracked_leave_type(leave_type: str) -> bool:
+    return leave_type in BALANCE_TRACKED_LEAVE_TYPES
 
 
 def get_connection():
@@ -2136,6 +2147,8 @@ def dashboard():
         summary=summary,
         can_self_clock=role_can(current_role_name(), CLOCK_SELF_ROLES),
         can_manual_leave_entry=role_can(current_role_name(), MANUAL_LEAVE_ENTRY_ROLES),
+        can_leave_approve=role_can(current_role_name(), LEAVE_APPROVER_ROLES),
+        leave_type_options=get_leave_type_options(summary["is_head_start"]),
         period_start=period_start,
         period_end=period_end,
     )
@@ -2564,7 +2577,7 @@ def export_timesheet_pdf():
 
 @app.route("/admin")
 @login_required
-@roles_required("Owner", "Executive Director", "Director", "Manager")
+@roles_required("Owner", "Executive Director", "Director", "Manager", "Leave Manager")
 def admin_dashboard():
     viewer_id = current_employee_id()
     viewer_role = current_role_name()
@@ -2573,7 +2586,7 @@ def admin_dashboard():
     with get_connection() as conn:
         ensure_role_catalog(conn)
         cursor = conn.cursor()
-        if viewer_role == "Owner":
+        if viewer_role in {"Owner", "Executive Director", "Leave Manager"}:
             cursor.execute(
                 """
                 SELECT
@@ -2585,10 +2598,17 @@ def admin_dashboard():
                     LR.StartDate,
                     LR.EndDate,
                     LR.RequestedHours,
-                    LR.ApprovalStatus
+                    LR.ApprovalStatus,
+                    CASE
+                        WHEN LR.LeaveType = 'Annual' THEN IFNULL(B.AnnualLeaveHours, 0)
+                        WHEN LR.LeaveType = 'Personal' THEN IFNULL(B.PersonalLeaveHours, 0)
+                        WHEN LR.LeaveType = 'Sick' THEN IFNULL(B.SickLeaveHours, 0)
+                        ELSE NULL
+                    END AS CurrentBalance
                 FROM dbo.LeaveRequests LR
                 INNER JOIN dbo.Employees E ON E.EmployeeId = LR.EmployeeId
-                WHERE LR.ApprovalStatus = 'Pending'
+                LEFT JOIN dbo.vw_EmployeeLeaveBalances B ON B.EmployeeId = E.EmployeeId
+                WHERE LR.ApprovalStatus IN ('Pending', 'Override Pending')
                 ORDER BY LR.RequestedAt ASC
                 """
             )
@@ -2618,9 +2638,16 @@ def admin_dashboard():
                     LR.StartDate,
                     LR.EndDate,
                     LR.RequestedHours,
-                    LR.ApprovalStatus
+                    LR.ApprovalStatus,
+                    CASE
+                        WHEN LR.LeaveType = 'Annual' THEN IFNULL(B.AnnualLeaveHours, 0)
+                        WHEN LR.LeaveType = 'Personal' THEN IFNULL(B.PersonalLeaveHours, 0)
+                        WHEN LR.LeaveType = 'Sick' THEN IFNULL(B.SickLeaveHours, 0)
+                        ELSE NULL
+                    END AS CurrentBalance
                 FROM dbo.LeaveRequests LR
                 INNER JOIN dbo.Employees E ON E.EmployeeId = LR.EmployeeId
+                LEFT JOIN dbo.vw_EmployeeLeaveBalances B ON B.EmployeeId = E.EmployeeId
                 WHERE LR.ApprovalStatus = 'Pending'
                   AND E.EmployeeId IN (SELECT EmployeeId FROM EmployeeTree)
                 ORDER BY LR.RequestedAt ASC
@@ -2629,7 +2656,12 @@ def admin_dashboard():
             )
         pending_requests = cursor.fetchall()
 
-    return render_template("admin.html", pending_requests=pending_requests, accessible_employees=accessible_employees)
+    return render_template(
+        "admin.html",
+        pending_requests=pending_requests,
+        accessible_employees=accessible_employees,
+        viewer_role=viewer_role,
+    )
 
 
 @app.route("/owner/employees", methods=["GET", "POST"])
@@ -3550,13 +3582,15 @@ def manual_leave_entry():
         leave_type = request.form.get("leave_type", "")
         hours = request.form.get("hours", type=float)
         notes = request.form.get("notes", "").strip()
+        allowed_leave_types = set(get_leave_type_options(bool(selected_employee.IsHeadStart)))
 
-        if leave_type not in {"Annual", "Sick", "Personal"}:
+        if leave_type not in allowed_leave_types:
             flash("Select a valid leave type.", "error")
             return render_template(
                 "manual_leave_entry.html",
                 employees=employees,
                 selected_employee=selected_employee,
+                leave_type_options=get_leave_type_options(bool(selected_employee.IsHeadStart)),
             )
 
         if hours is None or hours == 0:
@@ -3565,6 +3599,7 @@ def manual_leave_entry():
                 "manual_leave_entry.html",
                 employees=employees,
                 selected_employee=selected_employee,
+                leave_type_options=get_leave_type_options(bool(selected_employee.IsHeadStart)),
             )
 
         if selected_employee.IsHeadStart and leave_type == "Annual":
@@ -3573,6 +3608,7 @@ def manual_leave_entry():
                 "manual_leave_entry.html",
                 employees=employees,
                 selected_employee=selected_employee,
+                leave_type_options=get_leave_type_options(bool(selected_employee.IsHeadStart)),
             )
 
         if not selected_employee.IsHeadStart and leave_type == "Personal":
@@ -3581,6 +3617,7 @@ def manual_leave_entry():
                 "manual_leave_entry.html",
                 employees=employees,
                 selected_employee=selected_employee,
+                leave_type_options=get_leave_type_options(bool(selected_employee.IsHeadStart)),
             )
 
         audit_note = f"Manual leave entry by {viewer_name}"
@@ -3621,14 +3658,19 @@ def manual_leave_entry():
         "manual_leave_entry.html",
         employees=employees,
         selected_employee=selected_employee,
+        leave_type_options=get_leave_type_options(bool(selected_employee.IsHeadStart)),
     )
 
 
 @app.route("/admin/leave/<int:leave_request_id>", methods=["POST"])
 @login_required
-@roles_required("Owner", "Executive Director", "Director", "Manager")
+@roles_required("Owner", "Executive Director", "Director", "Manager", "Leave Manager")
 def process_leave_request(leave_request_id: int):
     action = request.form["action"]
+    if action not in {"approve", "deny", "override"}:
+        flash("Select a valid leave action.", "error")
+        return redirect(url_for("admin_dashboard"))
+
     approval_status = "Approved" if action == "approve" else "Denied"
     viewer_role = current_role_name()
     leave_request = None
@@ -3637,7 +3679,28 @@ def process_leave_request(leave_request_id: int):
     with get_connection() as conn:
         ensure_role_catalog(conn)
         cursor = conn.cursor()
-        if viewer_role != "Owner":
+        cursor.execute(
+            """
+            SELECT LeaveRequestId, EmployeeId, ApprovalStatus, LeaveType, RequestedHours
+            FROM dbo.LeaveRequests
+            WHERE LeaveRequestId = ?
+            """,
+            leave_request_id,
+        )
+        request_row = cursor.fetchone()
+        if request_row is None:
+            flash("Leave request not found.", "error")
+            return redirect(url_for("admin_dashboard"))
+
+        if viewer_role == "Leave Manager":
+            if action != "override":
+                flash("Leave Managers can only submit an override for Executive Director approval.", "error")
+                return redirect(url_for("admin_dashboard"))
+        elif request_row.ApprovalStatus == "Override Pending" and viewer_role not in {"Owner", "Executive Director"}:
+            flash("Only the Owner or Executive Director can approve or deny a Leave Manager override.", "error")
+            return redirect(url_for("admin_dashboard"))
+
+        if viewer_role not in {"Owner", "Executive Director", "Leave Manager"}:
             cursor.execute(
                 """
                 WITH RECURSIVE EmployeeTree AS
@@ -3665,6 +3728,26 @@ def process_leave_request(leave_request_id: int):
             if not cursor.fetchone():
                 flash("You do not have access to that leave request.", "error")
                 return redirect(url_for("admin_dashboard"))
+
+        if action == "override":
+            try:
+                cursor.execute(
+                    """
+                    EXEC dbo.usp_RequestLeaveOverride
+                        @LeaveRequestId = ?,
+                        @OverrideRequestedByEmployeeId = ?
+                    """,
+                    leave_request_id,
+                    session["user"]["employee_id"],
+                )
+                conn.commit()
+            except pyodbc.Error as exc:
+                conn.rollback()
+                flash(str(exc).strip() or "Could not submit leave override.", "error")
+                return redirect(url_for("admin_dashboard"))
+
+            flash("Leave override submitted for Executive Director approval.", "success")
+            return redirect(url_for("admin_dashboard"))
 
         try:
             cursor.execute(

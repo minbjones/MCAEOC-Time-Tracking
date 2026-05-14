@@ -283,10 +283,15 @@ CREATE PROCEDURE `usp_RequestLeave`(
 )
 BEGIN
     DECLARE v_PersonalLeave TINYINT(1);
+    DECLARE v_RequestDays INT;
     SELECT `PersonalLeave` INTO v_PersonalLeave FROM `Employees` WHERE `EmployeeId` = p_EmployeeId LIMIT 1;
 
     IF p_EndDate < p_StartDate THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'End date cannot be earlier than start date.';
+    END IF;
+
+    IF p_LeaveType NOT IN ('Annual', 'Sick', 'Personal', 'Holiday', 'Inclement Weather', 'Training', 'Bereavement') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invalid leave type.';
     END IF;
 
     IF v_PersonalLeave = 1 AND p_LeaveType = 'Annual' THEN
@@ -295,6 +300,13 @@ BEGIN
 
     IF IFNULL(v_PersonalLeave, 0) = 0 AND p_LeaveType = 'Personal' THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Only personal-leave employees can request Personal leave.';
+    END IF;
+
+    IF p_LeaveType = 'Bereavement' THEN
+        SET v_RequestDays = DATEDIFF(p_EndDate, p_StartDate) + 1;
+        IF v_RequestDays > 3 THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Bereavement leave is limited to 3 consecutive days.';
+        END IF;
     END IF;
 
     INSERT INTO `LeaveRequests` (`EmployeeId`, `LeaveType`, `StartDate`, `EndDate`, `RequestedHours`, `Notes`)
@@ -310,17 +322,16 @@ BEGIN
         `Notes` = CONCAT(COALESCE(`Notes`, ''), IF(`Notes` IS NULL OR `Notes` = '', '', ' | '), 'Canceled by employee')
     WHERE `LeaveRequestId` = p_LeaveRequestId
       AND `EmployeeId` = p_EmployeeId
-      AND `ApprovalStatus` = 'Pending';
+      AND `ApprovalStatus` IN ('Pending', 'Override Pending');
 
     IF ROW_COUNT() = 0 THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Only pending leave requests can be cancelled by the requesting employee.';
     END IF;
 END$$
 
-CREATE PROCEDURE `usp_ProcessLeaveRequest`(
+CREATE PROCEDURE `usp_RequestLeaveOverride`(
     IN p_LeaveRequestId INT,
-    IN p_ApprovalStatus VARCHAR(20),
-    IN p_ApprovedByEmployeeId INT
+    IN p_OverrideRequestedByEmployeeId INT
 )
 BEGIN
     DECLARE v_EmployeeId INT;
@@ -336,26 +347,91 @@ BEGIN
     LIMIT 1;
 
     IF v_EmployeeId IS NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Only pending leave requests can be overridden.';
+    END IF;
+
+    IF v_LeaveType NOT IN ('Annual', 'Sick', 'Personal') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Overrides are only needed for Annual, Sick, or Personal leave.';
+    END IF;
+
+    SELECT CASE
+        WHEN v_LeaveType = 'Annual' THEN `AnnualLeaveHours`
+        WHEN v_LeaveType = 'Personal' THEN `PersonalLeaveHours`
+        ELSE `SickLeaveHours`
+    END
+      INTO v_CurrentBalance
+    FROM `vw_EmployeeLeaveBalances`
+    WHERE `EmployeeId` = v_EmployeeId
+    LIMIT 1;
+
+    IF IFNULL(v_CurrentBalance, 0) >= v_RequestedHours THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Leave balance is sufficient. A Leave Manager override is not required.';
+    END IF;
+
+    UPDATE `LeaveRequests`
+    SET `ApprovalStatus` = 'Override Pending',
+        `Notes` = CONCAT(
+            COALESCE(`Notes`, ''),
+            IF(`Notes` IS NULL OR `Notes` = '', '', ' | '),
+            'Override requested by EmployeeId ',
+            p_OverrideRequestedByEmployeeId
+        )
+    WHERE `LeaveRequestId` = p_LeaveRequestId;
+END$$
+
+CREATE PROCEDURE `usp_ProcessLeaveRequest`(
+    IN p_LeaveRequestId INT,
+    IN p_ApprovalStatus VARCHAR(20),
+    IN p_ApprovedByEmployeeId INT
+)
+BEGIN
+    DECLARE v_EmployeeId INT;
+    DECLARE v_LeaveType VARCHAR(20);
+    DECLARE v_RequestedHours DECIMAL(8,2);
+    DECLARE v_CurrentBalance DECIMAL(8,2);
+    DECLARE v_CurrentStatus VARCHAR(20);
+
+    SELECT `EmployeeId`, `LeaveType`, `RequestedHours`, `ApprovalStatus`
+      INTO v_EmployeeId, v_LeaveType, v_RequestedHours, v_CurrentStatus
+    FROM `LeaveRequests`
+    WHERE `LeaveRequestId` = p_LeaveRequestId
+      AND `ApprovalStatus` IN ('Pending', 'Override Pending')
+    LIMIT 1;
+
+    IF v_EmployeeId IS NULL THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Leave request was not found or is already processed.';
     END IF;
 
     IF p_ApprovalStatus = 'Approved' THEN
-        SELECT CASE
-            WHEN v_LeaveType = 'Annual' THEN `AnnualLeaveHours`
-            WHEN v_LeaveType = 'Personal' THEN `PersonalLeaveHours`
-            ELSE `SickLeaveHours`
-        END
-        INTO v_CurrentBalance
-        FROM `vw_EmployeeLeaveBalances`
-        WHERE `EmployeeId` = v_EmployeeId
-        LIMIT 1;
+        IF v_LeaveType IN ('Annual', 'Sick', 'Personal') THEN
+            SELECT CASE
+                WHEN v_LeaveType = 'Annual' THEN `AnnualLeaveHours`
+                WHEN v_LeaveType = 'Personal' THEN `PersonalLeaveHours`
+                ELSE `SickLeaveHours`
+            END
+            INTO v_CurrentBalance
+            FROM `vw_EmployeeLeaveBalances`
+            WHERE `EmployeeId` = v_EmployeeId
+            LIMIT 1;
 
-        IF IFNULL(v_CurrentBalance, 0) < v_RequestedHours THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Insufficient leave balance.';
+            IF IFNULL(v_CurrentBalance, 0) < v_RequestedHours AND v_CurrentStatus <> 'Override Pending' THEN
+                SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Insufficient leave balance.';
+            END IF;
         END IF;
 
         INSERT INTO `LeaveLedger` (`EmployeeId`, `EntryDate`, `LeaveType`, `Hours`, `EntryReason`, `ReferenceId`, `Notes`)
-        VALUES (v_EmployeeId, UTC_DATE(), v_LeaveType, v_RequestedHours * -1, 'Usage', p_LeaveRequestId, 'Approved leave request');
+        VALUES (
+            v_EmployeeId,
+            UTC_DATE(),
+            v_LeaveType,
+            v_RequestedHours * -1,
+            'Usage',
+            p_LeaveRequestId,
+            CASE
+                WHEN v_CurrentStatus = 'Override Pending' THEN 'Approved leave request with Leave Manager override'
+                ELSE 'Approved leave request'
+            END
+        );
     END IF;
 
     UPDATE `LeaveRequests`

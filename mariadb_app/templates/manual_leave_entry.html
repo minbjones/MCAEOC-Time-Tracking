@@ -18,12 +18,17 @@
         <label>
             Leave Type
             <select name="leave_type" required>
-                {% if selected_employee and selected_employee.IsHeadStart %}
-                <option value="Personal" {% if request.form.get('leave_type') == 'Personal' %}selected{% endif %}>Personal</option>
-                {% else %}
-                <option value="Annual" {% if request.form.get('leave_type') == 'Annual' %}selected{% endif %}>Annual Leave</option>
-                {% endif %}
-                <option value="Sick" {% if request.form.get('leave_type') == 'Sick' %}selected{% endif %}>Sick</option>
+                {% for leave_type in leave_type_options %}
+                <option value="{{ leave_type }}" {% if request.form.get('leave_type') == leave_type %}selected{% endif %}>
+                    {% if leave_type == 'Annual' %}
+                    Annual Leave
+                    {% elif leave_type == 'Bereavement' %}
+                    Bereavement (3 Consecutive Days)
+                    {% else %}
+                    {{ leave_type }}
+                    {% endif %}
+                </option>
+                {% endfor %}
             </select>
         </label>
         <label>

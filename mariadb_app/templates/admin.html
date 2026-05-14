@@ -3,15 +3,17 @@
 {% block content %}
 <section class="card">
     <h2>Leave Approvals</h2>
-    <p>Supervisors can approve or deny leave for their subordinates. Owners can review all requests.</p>
+    <p>Supervisors can approve or deny leave for their subordinates. Leave Managers can submit insufficient-balance overrides for Executive Director approval.</p>
     <table>
         <thead>
             <tr>
                 <th>Employee</th>
-                <th>Employee ID</th>
+                <th>Payroll ID</th>
                 <th>Type</th>
                 <th>Dates</th>
                 <th>Hours</th>
+                <th>Status</th>
+                <th>Available</th>
                 <th>Action</th>
             </tr>
         </thead>
@@ -19,20 +21,47 @@
             {% for request in pending_requests %}
             <tr>
                 <td>{{ request.FullName }}</td>
-                <td>{{ request.EmployeeId }}</td>
-                <td>{{ request.LeaveType }}</td>
+                <td>{{ request.PayrollId }}</td>
+                <td>
+                    {% if request.LeaveType == "Bereavement" %}
+                    Bereavement (3 Consecutive Days)
+                    {% else %}
+                    {{ request.LeaveType }}
+                    {% endif %}
+                </td>
                 <td>{{ request.StartDate|datefmt }} to {{ request.EndDate|datefmt }}</td>
                 <td>{{ request.RequestedHours }}</td>
+                <td>{{ request.ApprovalStatus }}</td>
                 <td>
+                    {% if request.CurrentBalance is not none %}
+                    {{ "%.2f"|format(request.CurrentBalance) }}
+                    {% else %}
+                    -
+                    {% endif %}
+                </td>
+                <td>
+                    {% if viewer_role == "Leave Manager" and request.ApprovalStatus == "Pending" and request.CurrentBalance is not none and request.CurrentBalance < request.RequestedHours %}
+                    <form method="post" action="{{ url_for('process_leave_request', leave_request_id=request.LeaveRequestId) }}" class="inline-form">
+                        <button type="submit" name="action" value="override">Override to Executive Director</button>
+                    </form>
+                    {% elif viewer_role in ["Owner", "Executive Director"] and request.ApprovalStatus == "Override Pending" %}
+                    <form method="post" action="{{ url_for('process_leave_request', leave_request_id=request.LeaveRequestId) }}" class="inline-form">
+                        <button type="submit" name="action" value="approve">Approve Override</button>
+                        <button type="submit" name="action" value="deny" class="danger">Deny Override</button>
+                    </form>
+                    {% elif viewer_role in ["Owner", "Executive Director", "Director", "Manager"] and request.ApprovalStatus == "Pending" %}
                     <form method="post" action="{{ url_for('process_leave_request', leave_request_id=request.LeaveRequestId) }}" class="inline-form">
                         <button type="submit" name="action" value="approve">Approve</button>
                         <button type="submit" name="action" value="deny" class="danger">Deny</button>
                     </form>
+                    {% else %}
+                    -
+                    {% endif %}
                 </td>
             </tr>
             {% else %}
             <tr>
-                <td colspan="6">No pending leave requests.</td>
+                <td colspan="8">No pending leave requests.</td>
             </tr>
             {% endfor %}
         </tbody>

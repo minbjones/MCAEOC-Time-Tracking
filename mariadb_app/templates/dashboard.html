@@ -45,16 +45,20 @@
 
     <article class="card wide-card">
         <h2>Request Time Off</h2>
+        <p class="helper-text">Bereavement requests are limited to 3 consecutive days.</p>
         <form method="post" action="{{ url_for('request_leave') }}" class="grid-form" data-track-changes="true" data-confirm-save-message="Submit this leave request?">
             <label>
                 Leave type
                 <select name="leave_type" required>
-                    {% if summary.is_head_start %}
-                    <option value="Personal">Personal</option>
-                    {% else %}
-                    <option value="Annual">Annual</option>
-                    {% endif %}
-                    <option value="Sick">Sick</option>
+                    {% for leave_type in leave_type_options %}
+                    <option value="{{ leave_type }}">
+                        {% if leave_type == "Bereavement" %}
+                        Bereavement (3 Consecutive Days)
+                        {% else %}
+                        {{ leave_type }}
+                        {% endif %}
+                    </option>
+                    {% endfor %}
                 </select>
             </label>
             <label>
@@ -95,12 +99,14 @@
     </article>
     {% endif %}
 
-    {% if session.get("role_name") in ["Owner", "Executive Director", "Director", "Manager"] %}
+    {% if can_leave_approve %}
     <article class="card">
         <h2>Team Tools</h2>
         <div class="button-row">
             <a class="button-link" href="{{ url_for('admin_dashboard') }}">Leave Approvals</a>
+            {% if session.get("role_name") in ["Owner", "Executive Director", "Director", "Manager"] %}
             <a class="button-link" href="{{ url_for('live_board') }}">Live In/Out Board</a>
+            {% endif %}
             {% if session.get("role_name") in ["Owner", "Executive Director"] %}
             <a class="button-link" href="{{ url_for('owner_employees') }}">Employees</a>
             {% endif %}
