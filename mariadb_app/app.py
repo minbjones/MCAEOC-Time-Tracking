@@ -1636,6 +1636,8 @@ def can_access_employee(target_employee_id: int, viewer_employee_id: int, role_n
 
 
 def get_supervisor_choices():
+    notification_message = None
+
     with get_connection() as conn:
         ensure_role_catalog(conn)
         cursor = conn.cursor()
@@ -2208,18 +2210,21 @@ def request_leave():
             notes or None,
         )
         conn.commit()
-        cursor.execute(
-            """
-            SELECT TOP 1 LeaveRequestId
-            FROM dbo.LeaveRequests
-            WHERE EmployeeId = ?
-            ORDER BY LeaveRequestId DESC
-            """,
-            session["user"]["employee_id"],
-        )
-        created_leave_request = cursor.fetchone()
-        if created_leave_request:
-            leave_request = get_leave_request_email_context(cursor, created_leave_request.LeaveRequestId)
+        try:
+            cursor.execute(
+                """
+                SELECT TOP 1 LeaveRequestId
+                FROM dbo.LeaveRequests
+                WHERE EmployeeId = ?
+                ORDER BY LeaveRequestId DESC
+                """,
+                session["user"]["employee_id"],
+            )
+            created_leave_request = cursor.fetchone()
+            if created_leave_request:
+                leave_request = get_leave_request_email_context(cursor, created_leave_request.LeaveRequestId)
+        except Exception as exc:
+            notification_message = f"Leave request was saved, but the notification details could not be loaded: {exc}"
 
     supervisor_name = ""
     if leave_request is not None:
@@ -2228,7 +2233,7 @@ def request_leave():
         flash(f"Leave request submitted to {supervisor_name}.", "success")
     else:
         flash("Leave request submitted.", "success")
-    email_warning = notify_supervisor_of_leave_request(leave_request)
+    email_warning = notification_message or notify_supervisor_of_leave_request(leave_request)
     if email_warning:
         flash(email_warning, "info")
     return redirect(url_for("dashboard"))
@@ -2237,6 +2242,8 @@ def request_leave():
 @app.route("/leave/<int:leave_request_id>/cancel", methods=["POST"])
 @login_required
 def cancel_leave_request(leave_request_id: int):
+    notification_message = None
+
     with get_connection() as conn:
         ensure_role_catalog(conn)
         cursor = conn.cursor()
@@ -3670,10 +3677,16 @@ def process_leave_request(leave_request_id: int):
             session["user"]["employee_id"],
         )
         conn.commit()
-        leave_request = get_leave_request_email_context(cursor, leave_request_id)
+        try:
+            leave_request = get_leave_request_email_context(cursor, leave_request_id)
+        except Exception as exc:
+            notification_message = f"Leave request was {approval_status.lower()}, but the notification details could not be loaded: {exc}"
 
     flash(f"Leave request {approval_status.lower()}.", "success")
-    email_warning = notify_requestor_of_leave_decision(leave_request, session["user"]["full_name"])
+    email_warning = notification_message or notify_requestor_of_leave_decision(
+        leave_request,
+        session["user"]["full_name"],
+    )
     if email_warning:
         flash(email_warning, "info")
     return redirect(url_for("admin_dashboard"))
