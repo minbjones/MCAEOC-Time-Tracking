@@ -25,12 +25,13 @@ services:
       EMPLOYEE_TIME_TRACKING_CONNECTION_STRING: SERVER=mariadb;DATABASE=dbo;UID=mcaeoc;PWD=1400Monster1!;PORT=3306;
       SMTP_HOST: smtp.office365.com
       SMTP_PORT: 587
-      SMTP_FROM_EMAIL:
+      SMTP_FROM_EMAIL: noreply@mcaeoc.org
       SMTP_FROM_NAME: MCAEOC Employee Time Tracking
       SMTP_USERNAME: noreply@mcaeoc.org
       SMTP_PASSWORD: 1400Monster1!
       SMTP_USE_TLS: "true"
       SMTP_USE_SSL: "false"
+      ENABLE_PASSWORD_SETUP_EMAIL: "true"
     ports:
       - "8000:8000"
 
