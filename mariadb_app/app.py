@@ -16,7 +16,7 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import Image as RLImage, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from flask import (
     Flask,
     flash,
@@ -36,6 +36,7 @@ CONNECTION_STRING_FILE = os.path.join(os.path.dirname(__file__), "employee_time_
 _connection_target_logged = False
 _password_setup_schema_ready = False
 PAY_PERIOD_END_ANCHOR = date(2026, 4, 24)
+TIMESHEET_LOGO_PATH = os.path.join(os.path.dirname(__file__), "static", "cap_huggy.png")
 
 LEAVE_APPROVER_ROLES = {"Owner", "Executive Director", "Director", "Manager"}
 MANUAL_LEAVE_ENTRY_ROLES = {"Owner", "Leave Manager"}
@@ -2241,9 +2242,54 @@ def export_timesheet_pdf():
     meta_style.fontSize = 10
     meta_style.leading = 12
 
-    story.append(Paragraph("Mississippi County, Arkansas", header_style))
-    story.append(Paragraph("Economic Opprtunity Commision", subheader_style))
-    story.append(Paragraph("Employee Timesheet", title_style))
+    header_logo = None
+    if os.path.exists(TIMESHEET_LOGO_PATH):
+        header_logo = RLImage(TIMESHEET_LOGO_PATH, width=0.52 * inch, height=0.52 * inch)
+
+    header_text_table = Table(
+        [
+            [Paragraph("Mississippi County, Arkansas", header_style)],
+            [Paragraph("Economic Opprtunity Commision", subheader_style)],
+            [Paragraph("Employee Timesheet", title_style)],
+        ],
+        colWidths=[5.85 * inch],
+        hAlign="LEFT",
+    )
+    header_text_table.setStyle(
+        TableStyle(
+            [
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ]
+        )
+    )
+
+    if header_logo is not None:
+        header_block = Table(
+            [[header_logo, header_text_table]],
+            colWidths=[0.7 * inch, 5.85 * inch],
+            hAlign="CENTER",
+        )
+        header_block.setStyle(
+            TableStyle(
+                [
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("ALIGN", (0, 0), (0, 0), "LEFT"),
+                    ("ALIGN", (1, 0), (1, 0), "CENTER"),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                    ("TOPPADDING", (0, 0), (-1, -1), 0),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                ]
+            )
+        )
+        story.append(header_block)
+    else:
+        story.append(Paragraph("Mississippi County, Arkansas", header_style))
+        story.append(Paragraph("Economic Opprtunity Commision", subheader_style))
+        story.append(Paragraph("Employee Timesheet", title_style))
 
     meta_data = [
         [

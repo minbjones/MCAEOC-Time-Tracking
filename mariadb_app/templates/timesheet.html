@@ -32,9 +32,14 @@
         <a class="button-link" href="{{ url_for('export_timesheet_pdf', period_start=period_start, employee_id=summary.employee_id) }}">Export PDF</a>
     </div>
     <div class="timesheet-header">
-        <h2>Mississippi County, Arkansas</h2>
-        <h3>Economic Opprtunity Commision</h3>
-        <p class="timesheet-title">Employee Timesheet</p>
+        <div class="timesheet-brand">
+            <img class="timesheet-brand-logo" src="{{ url_for('static', filename='cap_huggy.png') }}" alt="MCAEOC logo">
+            <div class="timesheet-brand-copy">
+                <h2>Mississippi County, Arkansas</h2>
+                <h3>Economic Opprtunity Commision</h3>
+                <p class="timesheet-title">Employee Timesheet</p>
+            </div>
+        </div>
         <div class="timesheet-meta">
             <p><strong>Employee Name:</strong> {{ summary.full_name }}</p>
             <p><strong>Payroll ID:</strong> {{ summary.payroll_id }}</p>
