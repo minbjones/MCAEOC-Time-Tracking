@@ -2188,6 +2188,7 @@ def request_leave():
     requested_hours = request.form["requested_hours"]
     notes = request.form.get("notes", "").strip()
     leave_request = None
+    notification_message = None
 
     with get_connection() as conn:
         ensure_role_catalog(conn)
@@ -3632,6 +3633,7 @@ def process_leave_request(leave_request_id: int):
     viewer_id = current_employee_id()
     viewer_role = current_role_name()
     leave_request = None
+    notification_message = None
 
     with get_connection() as conn:
         ensure_role_catalog(conn)
