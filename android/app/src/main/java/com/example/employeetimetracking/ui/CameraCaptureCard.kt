@@ -36,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
@@ -166,15 +167,67 @@ fun CameraCaptureCard(
 
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     val strokeWidth = 3.dp.toPx()
-                    val ovalWidth = size.width * 0.45f
-                    val ovalHeight = size.height * 0.75f
-                    val left = (size.width - ovalWidth) / 2
-                    val top = (size.height - ovalHeight) / 2
+                    val guideWidth = size.width * 0.56f
+                    val guideHeight = size.height * 0.82f
+                    val centerX = size.width / 2f
+                    val centerY = size.height / 2f
+                    val top = centerY - guideHeight / 2f
+                    val bottom = centerY + guideHeight / 2f
+                    val left = centerX - guideWidth / 2f
+                    val right = centerX + guideWidth / 2f
+                    val cheekInset = guideWidth * 0.16f
+                    val jawInset = guideWidth * 0.12f
+                    val chinDip = guideHeight * 0.08f
+                    val foreheadDip = guideHeight * 0.04f
 
-                    drawOval(
+                    val faceGuide = Path().apply {
+                        moveTo(centerX, top + foreheadDip)
+                        cubicTo(
+                            right - cheekInset * 0.4f,
+                            top - guideHeight * 0.02f,
+                            right + cheekInset * 0.2f,
+                            top + guideHeight * 0.22f,
+                            right - cheekInset * 0.25f,
+                            centerY - guideHeight * 0.06f
+                        )
+                        cubicTo(
+                            right - cheekInset * 0.1f,
+                            centerY + guideHeight * 0.16f,
+                            right - jawInset,
+                            bottom - guideHeight * 0.10f,
+                            centerX + guideWidth * 0.12f,
+                            bottom - chinDip
+                        )
+                        cubicTo(
+                            centerX + guideWidth * 0.06f,
+                            bottom + guideHeight * 0.02f,
+                            centerX - guideWidth * 0.06f,
+                            bottom + guideHeight * 0.02f,
+                            centerX - guideWidth * 0.12f,
+                            bottom - chinDip
+                        )
+                        cubicTo(
+                            left + jawInset,
+                            bottom - guideHeight * 0.10f,
+                            left + cheekInset * 0.1f,
+                            centerY + guideHeight * 0.16f,
+                            left + cheekInset * 0.25f,
+                            centerY - guideHeight * 0.06f
+                        )
+                        cubicTo(
+                            left - cheekInset * 0.2f,
+                            top + guideHeight * 0.22f,
+                            left + cheekInset * 0.4f,
+                            top - guideHeight * 0.02f,
+                            centerX,
+                            top + foreheadDip
+                        )
+                        close()
+                    }
+
+                    drawPath(
+                        path = faceGuide,
                         color = Color.White.copy(alpha = 0.7f),
-                        topLeft = Offset(left, top),
-                        size = Size(ovalWidth, ovalHeight),
                         style = Stroke(
                             width = strokeWidth,
                             pathEffect = PathEffect.dashPathEffect(floatArrayOf(30f, 15f), 0f)
