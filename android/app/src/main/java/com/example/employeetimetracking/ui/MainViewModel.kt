@@ -21,7 +21,9 @@ data class SessionState(
     val enrollmentEmployeeName: String = "",
     val enrollmentHasFaceTemplate: Boolean = false,
     val greetingMessage: String? = null,
-    val autoCaptureCooldownUntilMillis: Long = 0L
+    val autoCaptureCooldownUntilMillis: Long = 0L,
+    val audioAnnouncementText: String? = null,
+    val audioAnnouncementId: Long = 0L
 )
 
 class MainViewModel : ViewModel() {
@@ -29,6 +31,17 @@ class MainViewModel : ViewModel() {
     val sessionState: StateFlow<SessionState> = _sessionState
 
     val deviceIdentifier = "android-emulator"
+
+    private fun buildClockAnnouncement(fullName: String?, eventType: String?): String? {
+        if (fullName.isNullOrBlank() || eventType.isNullOrBlank()) {
+            return null
+        }
+        return when (eventType) {
+            "ClockIn" -> "$fullName clocked in"
+            "ClockOut" -> "$fullName clocked out"
+            else -> "$fullName ${eventType.replace("Clock", "clock ").lowercase()}"
+        }
+    }
 
     init {
         loadEmployees()
@@ -117,6 +130,11 @@ class MainViewModel : ViewModel() {
                 )
             }.onSuccess { response ->
                 val cooldownUntil = System.currentTimeMillis() + if (response.success) 8_000L else 2_000L
+                val announcementText = if (response.success) {
+                    buildClockAnnouncement(response.full_name, response.event_type)
+                } else {
+                    null
+                }
                 _sessionState.value = _sessionState.value.copy(
                     statusMessage = response.message,
                     greetingMessage = if (response.success && response.full_name != null && response.event_type != null) {
@@ -125,7 +143,9 @@ class MainViewModel : ViewModel() {
                         null
                     },
                     isLoading = false,
-                    autoCaptureCooldownUntilMillis = cooldownUntil
+                    autoCaptureCooldownUntilMillis = cooldownUntil,
+                    audioAnnouncementText = announcementText,
+                    audioAnnouncementId = if (announcementText != null) System.currentTimeMillis() else _sessionState.value.audioAnnouncementId
                 )
                 if (response.success) {
                     delay(3000)

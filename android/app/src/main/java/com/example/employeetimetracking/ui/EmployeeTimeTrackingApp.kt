@@ -1,5 +1,9 @@
 package com.example.employeetimetracking.ui
 
+import android.content.Context
+import android.media.AudioManager
+import android.media.ToneGenerator
+import android.speech.tts.TextToSpeech
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Row
@@ -43,6 +47,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import com.example.employeetimetracking.R
 import androidx.compose.foundation.text.KeyboardOptions
@@ -50,6 +55,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.employeetimetracking.data.EmployeeListItem
+import java.util.Locale
 
 private val DeepBlue = Color(0xFF0B3D91)
 private val MidnightBlue = Color(0xFF072A63)
@@ -59,6 +65,8 @@ private val PanelBlue = Color(0x332A5CAA)
 @Composable
 fun EmployeeTimeTrackingApp(viewModel: MainViewModel) {
     val sessionState by viewModel.sessionState.collectAsState()
+    val context = LocalContext.current
+    val announcer = rememberAudioAnnouncer(context)
     EmployeeTimeTrackingContent(
         sessionState = sessionState,
         onRefreshEmployees = viewModel::loadEmployees,
@@ -66,6 +74,50 @@ fun EmployeeTimeTrackingApp(viewModel: MainViewModel) {
         onCaptureClockEvent = viewModel::identifyAndClock,
         onEnrollmentCapture = viewModel::enrollFace
     )
+    LaunchedEffect(sessionState.audioAnnouncementId) {
+        val message = sessionState.audioAnnouncementText
+        if (sessionState.audioAnnouncementId != 0L && !message.isNullOrBlank()) {
+            announcer.playSuccess(message)
+        }
+    }
+}
+
+private class AudioAnnouncer(context: Context) : TextToSpeech.OnInitListener {
+    private var textToSpeech: TextToSpeech? = TextToSpeech(context.applicationContext, this)
+    private var isReady = false
+    private val toneGenerator = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 85)
+
+    override fun onInit(status: Int) {
+        val tts = textToSpeech ?: return
+        if (status == TextToSpeech.SUCCESS) {
+            val result = tts.setLanguage(Locale.US)
+            isReady = result != TextToSpeech.LANG_MISSING_DATA && result != TextToSpeech.LANG_NOT_SUPPORTED
+        }
+    }
+
+    fun playSuccess(message: String) {
+        toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP, 180)
+        if (isReady) {
+            textToSpeech?.speak(message, TextToSpeech.QUEUE_FLUSH, null, "clock-event")
+        }
+    }
+
+    fun release() {
+        toneGenerator.release()
+        textToSpeech?.stop()
+        textToSpeech?.shutdown()
+        textToSpeech = null
+        isReady = false
+    }
+}
+
+@Composable
+private fun rememberAudioAnnouncer(context: Context): AudioAnnouncer {
+    val announcer = androidx.compose.runtime.remember(context) { AudioAnnouncer(context) }
+    androidx.compose.runtime.DisposableEffect(announcer) {
+        onDispose { announcer.release() }
+    }
+    return announcer
 }
 
 @Composable
