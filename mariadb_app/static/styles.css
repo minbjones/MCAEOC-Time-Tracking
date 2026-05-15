@@ -96,7 +96,7 @@ body {
     gap: 1rem;
     padding: 0.9rem 1rem;
     border: 1px solid rgba(255, 255, 255, 0.45);
-    border-radius: 24px;
+    border-radius: 0;
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.78) 0%, rgba(245, 249, 252, 0.72) 100%);
     backdrop-filter: blur(10px);
     box-shadow: var(--shadow-soft);
@@ -182,7 +182,7 @@ body {
 
 .nav-links a {
     padding: 0.55rem 0.86rem;
-    border-radius: 999px;
+    border-radius: 0;
     background: rgba(255, 255, 255, 0.68);
     border: 1px solid rgba(127, 150, 167, 0.36);
     backdrop-filter: blur(10px);
@@ -220,7 +220,7 @@ body {
 .card {
     background: linear-gradient(180deg, var(--panel-strong) 0%, var(--panel) 100%);
     border: 1px solid var(--line);
-    border-radius: 20px;
+    border-radius: 0;
     box-shadow: var(--shadow);
     padding: 1rem 1.05rem;
     backdrop-filter: blur(12px);
@@ -282,7 +282,7 @@ textarea {
     width: 100%;
     min-height: 42px;
     padding: 0.68rem 0.82rem;
-    border-radius: 12px;
+    border-radius: 0;
     border: 1px solid var(--line-strong);
     background: var(--panel-soft);
     color: var(--text);
@@ -318,7 +318,7 @@ button,
     min-height: 40px;
     padding: 0.68rem 1rem;
     border: none;
-    border-radius: 12px;
+    border-radius: 0;
     background: linear-gradient(180deg, #2c6b9a 0%, var(--accent) 100%);
     color: #fff;
     cursor: pointer;
@@ -344,7 +344,7 @@ button:hover,
 
 .flash {
     padding: 0.82rem 0.95rem;
-    border-radius: 14px;
+    border-radius: 0;
     border: 1px solid var(--line);
     box-shadow: var(--shadow-soft);
     background: rgba(255, 255, 255, 0.8);
@@ -367,7 +367,7 @@ button:hover,
 
 .table-wrap {
     overflow-x: auto;
-    border-radius: 16px;
+    border-radius: 0;
 }
 
 table {
@@ -375,7 +375,7 @@ table {
     border-collapse: collapse;
     background: rgba(255, 255, 255, 0.92);
     border: 1px solid var(--line);
-    border-radius: 16px;
+    border-radius: 0;
     overflow: hidden;
 }
 
@@ -435,7 +435,7 @@ td a:hover,
     margin: 0.6rem 0 0.8rem;
     padding: 0.8rem 0.9rem;
     border: 1px solid var(--line);
-    border-radius: 14px;
+    border-radius: 0;
     background: rgba(244, 248, 251, 0.95);
     color: #294154;
     overflow-x: auto;
@@ -497,7 +497,7 @@ td a:hover,
     text-align: left;
     background: rgba(246, 250, 252, 0.95);
     border: 1px solid var(--line);
-    border-radius: 16px;
+    border-radius: 0;
     padding: 0.85rem;
 }
 
