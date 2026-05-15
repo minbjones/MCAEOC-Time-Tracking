@@ -167,58 +167,61 @@ fun CameraCaptureCard(
 
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     val strokeWidth = 3.dp.toPx()
-                    val guideWidth = size.width * 0.56f
-                    val guideHeight = size.height * 0.82f
+                    val guideWidth = size.width * 0.54f
+                    val guideHeight = size.height * 0.84f
                     val centerX = size.width / 2f
                     val centerY = size.height / 2f
                     val top = centerY - guideHeight / 2f
                     val bottom = centerY + guideHeight / 2f
                     val left = centerX - guideWidth / 2f
                     val right = centerX + guideWidth / 2f
-                    val cheekInset = guideWidth * 0.16f
-                    val jawInset = guideWidth * 0.12f
-                    val chinDip = guideHeight * 0.08f
-                    val foreheadDip = guideHeight * 0.04f
+                    val foreheadDip = guideHeight * 0.035f
+                    val cheekHeight = guideHeight * 0.28f
+                    val lowerCheekHeight = guideHeight * 0.72f
+                    val upperCurveInset = guideWidth * 0.08f
+                    val lowerCurveInset = guideWidth * 0.20f
+                    val chinHalfWidth = guideWidth * 0.12f
+                    val chinHeight = guideHeight * 0.035f
 
                     val faceGuide = Path().apply {
                         moveTo(centerX, top + foreheadDip)
                         cubicTo(
-                            right - cheekInset * 0.4f,
-                            top - guideHeight * 0.02f,
-                            right + cheekInset * 0.2f,
-                            top + guideHeight * 0.22f,
-                            right - cheekInset * 0.25f,
-                            centerY - guideHeight * 0.06f
+                            right - guideWidth * 0.02f,
+                            top - guideHeight * 0.01f,
+                            right + upperCurveInset,
+                            top + cheekHeight * 0.65f,
+                            right - guideWidth * 0.02f,
+                            centerY - guideHeight * 0.03f
                         )
                         cubicTo(
-                            right - cheekInset * 0.1f,
-                            centerY + guideHeight * 0.16f,
-                            right - jawInset,
-                            bottom - guideHeight * 0.10f,
-                            centerX + guideWidth * 0.12f,
-                            bottom - chinDip
+                            right - guideWidth * 0.04f,
+                            centerY + guideHeight * 0.18f,
+                            centerX + guideWidth * 0.34f,
+                            top + lowerCheekHeight,
+                            centerX + chinHalfWidth,
+                            bottom - chinHeight
                         )
                         cubicTo(
                             centerX + guideWidth * 0.06f,
-                            bottom + guideHeight * 0.02f,
+                            bottom + guideHeight * 0.01f,
                             centerX - guideWidth * 0.06f,
-                            bottom + guideHeight * 0.02f,
-                            centerX - guideWidth * 0.12f,
-                            bottom - chinDip
+                            bottom + guideHeight * 0.01f,
+                            centerX - chinHalfWidth,
+                            bottom - chinHeight
                         )
                         cubicTo(
-                            left + jawInset,
-                            bottom - guideHeight * 0.10f,
-                            left + cheekInset * 0.1f,
-                            centerY + guideHeight * 0.16f,
-                            left + cheekInset * 0.25f,
-                            centerY - guideHeight * 0.06f
+                            centerX - guideWidth * 0.34f,
+                            top + lowerCheekHeight,
+                            left + guideWidth * 0.04f,
+                            centerY + guideHeight * 0.18f,
+                            left + guideWidth * 0.02f,
+                            centerY - guideHeight * 0.03f
                         )
                         cubicTo(
-                            left - cheekInset * 0.2f,
-                            top + guideHeight * 0.22f,
-                            left + cheekInset * 0.4f,
-                            top - guideHeight * 0.02f,
+                            left - upperCurveInset,
+                            top + cheekHeight * 0.65f,
+                            left + guideWidth * 0.02f,
+                            top - guideHeight * 0.01f,
                             centerX,
                             top + foreheadDip
                         )
